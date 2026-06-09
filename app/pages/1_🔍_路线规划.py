@@ -1,26 +1,69 @@
 """
 12306省心小助手 - 路线规划页面
+支持智能站点名匹配
 """
 
 import streamlit as st
 from core.planner import RoutePlanner
 from core.filter import RouteFilter
 from core.scorer import RouteScorer
+from api.client_12306 import Client12306
 
 st.set_page_config(page_title="路线规划 🔍", page_icon="🔍", layout="wide")
 
 st.title("🔍 路线规划")
 st.caption("输入出发地和目的地，智能推荐最优出行方案")
 
+# 初始化客户端获取站点列表（用于模糊匹配）
+@st.cache_data
+def get_all_stations():
+    """获取所有站点名称列表"""
+    client = Client12306()
+    # 触发站点数据加载
+    client._load_station_data()
+    return client._station_names if client._station_names else []
+
+
+@st.cache_data
+def get_station_suggestions(keyword: str) -> list[str]:
+    """
+    获取站点建议列表
+    
+    Args:
+        keyword: 用户输入的关键词
+        
+    Returns:
+        匹配的站点名称列表
+    """
+    if not keyword or len(keyword) < 1:
+        return []
+    
+    client = Client12306()
+    return client.fuzzy_search_stations(keyword)
+
+
 # ===== 查询表单 =====
 with st.form("route_query"):
     col1, col2, col3 = st.columns(3)
+    
+    # 获取站点列表
+    all_stations = get_all_stations()
 
     with col1:
-        from_station = st.text_input("🚉 出发地", placeholder="如：东安东、长沙、北京")
+        from_station_input = st.text_input("🚉 出发地", placeholder="如：东安东、长沙、北京")
+        # 如果有模糊匹配，显示提示
+        if from_station_input:
+            suggestions = get_station_suggestions(from_station_input)
+            if suggestions and from_station_input not in suggestions:
+                st.caption(f"💡 匹配到: {', '.join(suggestions[:5])}")
 
     with col2:
-        to_station = st.text_input("🏁 目的地", placeholder="如：深圳、拉萨、广州")
+        to_station_input = st.text_input("🏁 目的地", placeholder="如：深圳、拉萨、广州")
+        # 如果有模糊匹配，显示提示
+        if to_station_input:
+            suggestions = get_station_suggestions(to_station_input)
+            if suggestions and to_station_input not in suggestions:
+                st.caption(f"💡 匹配到: {', '.join(suggestions[:5])}")
 
     with col3:
         travel_date = st.date_input("📅 出发日期")
@@ -43,6 +86,10 @@ with st.form("route_query"):
 
 # ===== 查询结果 =====
 if submitted:
+    # 获取用户输入的站名（使用原始输入，让后端自动解析）
+    from_station = from_station_input.strip()
+    to_station = to_station_input.strip()
+    
     if not from_station or not to_station:
         st.error("请输入出发地和目的地！")
     elif from_station == to_station:
@@ -128,12 +175,19 @@ if submitted:
                                 st.markdown(f"  硬卧：¥{route.price_rw}")
                             if route.price_yw:
                                 st.markdown(f"  软卧：¥{route.price_yw}")
+                            if route.price_edz:
+                                st.markdown(f"  二等座：¥{route.price_edz}")
+                            if route.price_ydz:
+                                st.markdown(f"  一等座：¥{route.price_ydz}")
+                            if route.price_swb:
+                                st.markdown(f"  商务座：¥{route.price_swb}")
 
                         st.info("⚠️ 以上信息仅供参考，实际票价和时刻请以12306为准")
             else:
                 st.error(f"抱歉，未找到 {from_station} → {to_station} 的可用路线 😢")
                 st.markdown("**建议：**")
-                st.markdown("- 检查站名是否正确（如用「长沙南」而非「长沙」）")
+                st.markdown("- 检查站名是否正确")
+                st.markdown("- 尝试输入更完整的站名（如「长沙南」而非「长沙」）")
                 st.markdown("- 尝试附近的大站作为出发/到达站")
                 st.markdown("- 直接到 [12306](https://www.12306.cn) 查询")
 else:
@@ -141,5 +195,6 @@ else:
     st.info("👆 输入出发地和目的地，选择偏好后点击查询")
     st.markdown("### 💡 使用提示")
     st.markdown("- 支持**直达**和**换乘**方案查询")
+    st.markdown("- 支持智能站名匹配：输入「长沙」会自动匹配「长沙」或「长沙南」")
     st.markdown("- 5种筛选偏好可按需选择，默认推荐性价比最高的方案")
     st.markdown("- 换乘方案会自动计算等待时间和换乘指引")

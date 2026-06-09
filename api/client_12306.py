@@ -1,11 +1,20 @@
 """
 12306查询客户端
 封装12306查询接口，支持余票和时刻查询
+支持Demo模式（模拟数据）
 """
 
 import httpx
+import os
 from loguru import logger
-from typing import Optional
+from typing import Optional, Optional
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
+
+# 导入demo数据
+from api.demo_data import get_demo_routes, has_demo_data
 
 
 class Client12306:
@@ -22,8 +31,29 @@ class Client12306:
         "Referer": "https://kyfw.12306.cn/otn/leftTicket/init",
     }
 
-    def __init__(self):
+    def __init__(self, demo_mode: Optional[bool] = None):
+        """
+        初始化12306客户端
+        
+        Args:
+            demo_mode: 是否启用Demo模式，None时从环境变量DEMO_MODE读取
+        """
+        # 如果未指定demo_mode，从环境变量读取
+        if demo_mode is None:
+            demo_mode_str = os.getenv("DEMO_MODE", "false").lower()
+            demo_mode = demo_mode_str in ("true", "1", "yes")
+        
+        self._demo_mode = demo_mode
         self._station_map: Optional[dict[str, str]] = None
+        self._station_names: Optional[list[str]] = None  # 用于模糊搜索
+        
+        if self._demo_mode:
+            logger.info("12306客户端已启用Demo模式（模拟数据）")
+
+    @property
+    def demo_mode(self) -> bool:
+        """是否处于Demo模式"""
+        return self._demo_mode
 
     def query(
         self,
@@ -42,6 +72,20 @@ class Client12306:
         Returns:
             车次信息列表
         """
+        # Demo模式：直接返回模拟数据
+        if self._demo_mode:
+            # 尝试模糊匹配站点名
+            from_station = self._auto_resolve_station(from_station)
+            to_station = self._auto_resolve_station(to_station)
+            
+            demo_routes = get_demo_routes(from_station, to_station)
+            if demo_routes:
+                logger.info(f"Demo模式返回 {len(demo_routes)} 条模拟数据: {from_station}→{to_station}")
+                return demo_routes
+            else:
+                logger.info(f"Demo模式: 暂无 {from_station}→{to_station} 的模拟数据")
+                return []
+        
         try:
             # 获取站点代码
             from_code = self._get_station_code(from_station)
@@ -80,15 +124,71 @@ class Client12306:
             logger.error(f"12306查询异常: {e}")
             return []
 
+    def _auto_resolve_station(self, station_name: str) -> str:
+        """
+        自动解析站名：精确匹配优先，否则模糊匹配取第一个
+        
+        Args:
+            station_name: 用户输入的站名
+            
+        Returns:
+            解析后的标准站名
+        """
+        # 精确匹配
+        if self._get_station_code(station_name):
+            return station_name
+        
+        # 模糊匹配
+        matches = self.fuzzy_search_stations(station_name)
+        if matches:
+            logger.info(f"站名模糊匹配: '{station_name}' → '{matches[0]}'")
+            return matches[0]
+        
+        # 无法匹配，返回原值
+        logger.warning(f"无法匹配站名: {station_name}")
+        return station_name
+
+    def fuzzy_search_stations(self, keyword: str) -> list[str]:
+        """
+        模糊搜索站点名称
+        
+        Args:
+            keyword: 关键词
+            
+        Returns:
+            所有包含关键词的站名列表（按相关性排序）
+        """
+        if not keyword:
+            return []
+        
+        # 确保站点数据已加载
+        if self._station_names is None:
+            self._load_station_data()
+        
+        keyword_lower = keyword.lower()
+        matches = []
+        
+        for name in self._station_names:
+            if keyword_lower in name.lower():
+                # 优先完全匹配的
+                if name == keyword:
+                    matches.insert(0, name)
+                else:
+                    matches.append(name)
+        
+        return matches
+
     def _get_station_code(self, station_name: str) -> Optional[str]:
         """获取站点电报码"""
         if self._station_map is None:
-            self._load_station_map()
+            self._load_station_data()
         return self._station_map.get(station_name)
 
-    def _load_station_map(self):
-        """加载站点名→电报码映射"""
+    def _load_station_data(self):
+        """加载站点数据（名称→电报码映射 + 站名列表）"""
         self._station_map = {}
+        self._station_names = []
+        
         try:
             with httpx.Client(timeout=15) as client:
                 resp = client.get(self.STATION_URL, headers=self.HEADERS, follow_redirects=True)
@@ -103,28 +203,151 @@ class Client12306:
                     name = parts[1]       # 站名
                     code = parts[2]       # 电报码
                     self._station_map[name] = code
+                    self._station_names.append(name)
 
             logger.info(f"加载站点映射: {len(self._station_map)} 个站点")
 
         except Exception as e:
             logger.error(f"加载站点映射失败: {e}")
             # 使用预置常用站点
-            self._station_map = {
-                "北京": "BJP", "北京西": "BXP", "北京南": "VNP",
-                "上海": "SHH", "上海虹桥": "AOH", "上海南": "SNH",
-                "广州": "GZQ", "广州南": "IZQ", "广州东": "GGQ",
-                "深圳": "SZQ", "深圳北": "IOQ", "深圳东": "BJQ",
-                "长沙": "CSQ", "长沙南": "CWQ",
-                "武汉": "WHN", "汉口": "HKN",
-                "成都东": "ICW", "重庆北": "CUW",
-                "永州": "YNQ", "东安东": "DAZ",
-                "衡阳东": "HVQ", "株洲西": "ZAQ",
-                "南京南": "NKH", "杭州东": "HGH",
-                "西安北": "EAO", "郑州东": "ZAF",
-                "贵阳北": "KQW", "南宁东": "NFZ",
-                "昆明南": "KOM", "拉萨": "LSO",
-                "西宁": "XNO", "格尔木": "GRO",
-            }
+            self._fallback_station_map()
+
+    def _fallback_station_map(self):
+        """使用预置的常用站点"""
+        self._station_map = {
+            # 直辖市
+            "北京": "BJP", "北京西": "BXP", "北京南": "VNP", "北京北": "VAP", "北京东": "BDP",
+            "上海": "SHH", "上海虹桥": "AOH", "上海南": "SNH", "上海西": "SXH",
+            "天津": "TJP", "天津西": "TXF", "天津南": "TIP",
+            "重庆": "CQW", "重庆北": "CUW", "重庆西": "CXW",
+            
+            # 广东省
+            "广州": "GZQ", "广州南": "IZQ", "广州东": "GGQ", "广州西": "GXQ", "广州北": "BBQ",
+            "深圳": "SZQ", "深圳北": "IOQ", "深圳东": "BJQ", "深圳西": "SJQ",
+            
+            # 湖南省
+            "长沙": "CSQ", "长沙南": "CWQ", "长沙西": "CXQ",
+            "衡阳": "HYC", "衡阳东": "HVQ",
+            "株洲": "ZZC", "株洲西": "ZAQ",
+            "永州": "YNQ",
+            "东安东": "DAZ",
+            
+            # 湖北省
+            "武汉": "WHN", "武汉西": "WEF", "汉口": "HKN", "武昌": "WCN",
+            
+            # 河南省
+            "郑州": "ZZF", "郑州东": "ZAF", "郑州西": "XPF",
+            "洛阳": "LYF", "洛阳龙门": "LLF",
+            
+            # 江苏省
+            "南京": "NJH", "南京南": "NKH", "南京北": "NJH",
+            "苏州": "SZH", "苏州北": "OBH",
+            "无锡": "WXH",
+            "常州": "CZH",
+            "镇江": "ZJH",
+            
+            # 浙江省
+            "杭州": "HZH", "杭州东": "HGH", "杭州南": "XHH", "杭州西": "XGH",
+            "宁波": "NGH", "宁波东": "GLH",
+            "温州": "RZH", "温州南": "VRH",
+            "义乌": "YWG",
+            
+            # 四川省
+            "成都": "CDW", "成都东": "ICW", "成都南": "CNW", "成都西": "CXW",
+            "绵阳": "MYW",
+            "乐山": "USW",
+            "宜宾": "YBW",
+            
+            # 重庆市辖区
+            "万州": "WYW",
+            
+            # 贵州省
+            "贵阳": "GIW", "贵阳北": "KQW", "贵阳东": "KEW",
+            
+            # 云南省
+            "昆明": "KMM", "昆明南": "KOM", "昆明西": "KXM",
+            "大理": "DKM",
+            "丽江": "LJM",
+            
+            # 陕西省
+            "西安": "XAY", "西安北": "EAO", "西安南": "CAY",
+            "西安西": "EAS",
+            "宝鸡": "BJY",
+            
+            # 甘肃省
+            "兰州": "LZJ", "兰州西": "LAJ", "兰州东": "LDJ",
+            "敦煌": "DHJ",
+            "嘉峪关": "JXJ",
+            
+            # 青海省
+            "西宁": "XNO",
+            "格尔木": "GRO",
+            
+            # 西藏
+            "拉萨": "LSO",
+            
+            # 新疆
+            "乌鲁木齐": "WMR", "乌鲁木齐南": "WAR",
+            "吐鲁番": "TFR",
+            "哈密": "HMR",
+            
+            # 东北三省
+            "哈尔滨": "HRB", "哈尔滨西": "VBB", "哈尔滨东": "VAB",
+            "长春": "CCT", "长春西": "CRT",
+            "沈阳": "SYT", "沈阳北": "SBT", "沈阳南": "SOD",
+            "大连": "DLT", "大连北": "RRT",
+            
+            # 广西
+            "南宁": "NNZ", "南宁东": "NFZ",
+            "桂林": "GLZ", "桂林北": "GBZ",
+            "柳州": "LZZ",
+            "北海": "BHZ",
+            
+            # 福建省
+            "福州": "FZS", "福州南": "FYS", "福州北": "FBZ",
+            "厦门": "XMS", "厦门北": "XKS",
+            "泉州": "QYS",
+            
+            # 江西省
+            "南昌": "NCG", "南昌西": "NXG",
+            "赣州": "GZG",
+            "九江": "JJG",
+            
+            # 安徽省
+            "合肥": "HFH", "合肥南": "ENH", "合肥西": "HTH",
+            "黄山": "HKD",
+            "芜湖": "WHH",
+            
+            # 山东省
+            "济南": "JNK", "济南西": "JGK",
+            "青岛": "QDK", "青岛北": "QHK",
+            "烟台": "YAK",
+            "威海": "WKK",
+            
+            # 山西省
+            "太原": "TYV", "太原南": "TNV",
+            "大同": "DTV",
+            
+            # 河北省
+            "石家庄": "SJP", "石家庄东": "SXP",
+            "保定": "BDP",
+            "唐山": "TSP",
+            
+            # 内蒙古
+            "呼和浩特": "HHC",
+            "包头": "BTC",
+            
+            # 海南省
+            "海口": "HMQ", "海口东": "KEQ",
+            "三亚": "SEQ",
+            
+            # 宁夏
+            "银川": "YIJ",
+            
+            # 香港（高铁）
+            "香港西九龙": "XJA",
+        }
+        self._station_names = list(self._station_map.keys())
 
     def _parse_train_info(self, raw_str: str) -> dict:
         """
