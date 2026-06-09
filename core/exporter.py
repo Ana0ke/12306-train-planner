@@ -212,6 +212,52 @@ def export_to_markdown(trip_plan: TripPlan) -> str:
     return "\n".join(md)
 
 
+def format_itinerary_for_clipboard(trip_plan: TripPlan) -> str:
+    """
+    格式化行程为剪贴板复制专用文本
+    
+    格式简洁：出发→到达 车次 时间 价格，每行一条
+    
+    Args:
+        trip_plan: 旅行计划对象
+        
+    Returns:
+        简洁的行程文本，适合复制分享
+    """
+    lines = []
+    
+    # 标题
+    lines.append(f"{trip_plan.title}")
+    lines.append("=" * 40)
+    
+    # 基本信息
+    if trip_plan.train_route:
+        tr = trip_plan.train_route
+        lines.append(f"🚂 {tr.train_no} {tr.from_station} → {tr.to_station}")
+        lines.append(f"   {tr.depart_time} 出发 → {tr.arrive_time} 到达 | {tr.duration} | {tr.train_type}")
+        lines.append(f"   💰 {tr.price_range}")
+        lines.append("")
+    
+    # 每日行程摘要
+    lines.append("📅 行程安排")
+    lines.append("-" * 40)
+    for day in trip_plan.days:
+        highlights = []
+        if day.activities:
+            for act in day.activities[:3]:
+                highlights.append(act.name)
+        if highlights:
+            lines.append(f"Day{day.day_number} {day.theme}:")
+            lines.append(f"   {' | '.join(highlights)}")
+    
+    lines.append("")
+    lines.append(f"💰 预算: ¥{trip_plan.budget_breakdown.total:.0f}")
+    lines.append("=" * 40)
+    lines.append("由 12306省心小助手 生成")
+    
+    return "\n".join(lines)
+
+
 def export_to_share_text(trip_plan: TripPlan) -> str:
     """
     导出为微信分享短文案

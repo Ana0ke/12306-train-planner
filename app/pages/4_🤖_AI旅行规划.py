@@ -45,6 +45,8 @@ if "travel_date" not in st.session_state:
     st.session_state.travel_date = None
 if "season_info_display" not in st.session_state:
     st.session_state.season_info_display = None
+if "last_from_station" not in st.session_state:
+    st.session_state.last_from_station = ""  # 记住上次输入的出发城市
 
 
 def check_llm_config() -> bool:
@@ -158,10 +160,13 @@ with st.form("ai_trip_form"):
         )
 
     with col3:
+        # 使用上次输入的值作为默认值，如果为空则显示空字符串
+        default_from = st.session_state.last_from_station if st.session_state.last_from_station else ""
         from_station = st.text_input(
             "🚂 出发城市",
-            value="长沙",
-            help="从哪里出发"
+            value=default_from,
+            placeholder="如：北京、上海",
+            help="从哪里出发（为空则跳过火车查询）"
         )
 
     # 第二行：出行日期和预算
@@ -262,47 +267,55 @@ with st.form("ai_trip_form"):
 
 # ===== 处理查询 =====
 if submitted:
+    # 保存出发城市到session_state
+    if from_station:
+        st.session_state.last_from_station = from_station
+    
     if not destination:
         st.error("请输入目的地！")
     else:
-        # 查询火车路线
-        with st.spinner("🔍 查询最优火车路线..."):
-            try:
-                planner = RoutePlanner()
-                # 直接用search_with_transfer，它内部会先查直达再查换乘
-                routes = planner.search_with_transfer(
-                    from_station=from_station,
-                    to_station=destination,
-                    travel_date="2024-01-01",  # 日期不影响路线
-                )
+        # 如果出发城市为空，直接跳过火车查询
+        if not from_station:
+            train_info = None
+        else:
+            # 查询火车路线
+            with st.spinner("🔍 查询最优火车路线..."):
+                try:
+                    planner = RoutePlanner()
+                    # 直接用search_with_transfer，它内部会先查直达再查换乘
+                    routes = planner.search_with_transfer(
+                        from_station=from_station,
+                        to_station=destination,
+                        travel_date="2024-01-01",  # 日期不影响路线
+                    )
 
-                # 选择最优方案
-                train_info = None
-                if routes:
-                    best_route = routes[0]
-                    train_info = {
-                        "train_no": best_route.train_no,
-                        "from_station": best_route.from_station,
-                        "to_station": best_route.to_station,
-                        "depart_time": best_route.depart_time,
-                        "arrive_time": best_route.arrive_time,
-                        "duration": best_route.duration,
-                        "train_type": best_route.train_type,
-                        "transfers": best_route.transfers,
-                        "price_range": f"¥{best_route.price_low}~¥{best_route.price_high}",
-                        "price_low": best_route.price_low,
-                        "tips": f"{best_route.train_type}，{'直达' if best_route.transfers == 0 else f'换乘{best_route.transfers}次'}" + \
-                                f"，建议提前购票",
-                    }
-                    st.session_state.train_route_info = train_info
+                    # 选择最优方案
+                    train_info = None
+                    if routes:
+                        best_route = routes[0]
+                        train_info = {
+                            "train_no": best_route.train_no,
+                            "from_station": best_route.from_station,
+                            "to_station": best_route.to_station,
+                            "depart_time": best_route.depart_time,
+                            "arrive_time": best_route.arrive_time,
+                            "duration": best_route.duration,
+                            "train_type": best_route.train_type,
+                            "transfers": best_route.transfers,
+                            "price_range": f"¥{best_route.price_low}~¥{best_route.price_high}",
+                            "price_low": best_route.price_low,
+                            "tips": f"{best_route.train_type}，{'直达' if best_route.transfers == 0 else f'换乘{best_route.transfers}次'}" + \
+                                    f"，建议提前购票",
+                        }
+                        st.session_state.train_route_info = train_info
 
-                # 显示路线方案
-                if train_info:
-                    st.success(f"找到最优路线：{train_info['train_no']} {train_info['depart_time']}→{train_info['arrive_time']}")
+                    # 显示路线方案
+                    if train_info:
+                        st.success(f"找到最优路线：{train_info['train_no']} {train_info['depart_time']}→{train_info['arrive_time']}")
 
-            except Exception as e:
-                st.warning(f"路线查询失败，将跳过火车信息: {e}")
-                train_info = None
+                except Exception as e:
+                    st.warning(f"路线查询失败，将跳过火车信息: {e}")
+                    train_info = None
 
         # 调用AI生成行程
         with st.spinner("🤖 AI正在为你规划行程，请稍候..."):
@@ -349,6 +362,27 @@ def _display_trip_plan(plan: TripPlan, is_demo: bool = False):
         st.metric("📅 旅行天数", f"{plan.days_count}天")
     with col_sum3:
         st.metric("💰 预算", f"¥{plan.budget_breakdown.total:.0f}")
+
+    # 复制行程按钮
+    from core.exporter import format_itinerary_for_clipboard
+    clipboard_text = format_itinerary_for_clipboard(plan)
+    
+    # 使用HTML+JS实现复制到剪贴板
+    st.markdown(f"""
+    <button onclick="navigator.clipboard.writeText(`{clipboard_text.replace('`', '\\`').replace('\n', '\\n')}`).then(() => alert('行程已复制到剪贴板！'));"
+        style="
+            background: linear-gradient(135deg, #FF6B35, #FF8C42);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 8px;
+        ">
+        📋 复制行程到剪贴板
+    </button>
+    """, unsafe_allow_html=True)
 
     # 出行日期和季节信息
     if plan.travel_date:

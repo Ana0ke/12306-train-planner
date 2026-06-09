@@ -1,6 +1,10 @@
 """
 手机端底部导航组件
-提供类似App的底部Tab导航体验
+
+⚠️ 注意：此组件已禁用
+Streamlit多页面应用不支持通过HTML链接跳转页面
+侧边栏导航在移动端足够使用，底部导航会占用屏幕空间
+如需页面导航，请使用 st.switch_page() 或直接使用侧边栏
 """
 
 import streamlit as st
@@ -24,130 +28,28 @@ def render_mobile_nav():
     """
     渲染手机端底部导航栏
     
-    通过注入HTML/CSS实现固定的底部导航
-    用户点击后跳转到对应页面
+    ⚠️ 已禁用：Streamlit不支持通过HTML链接跳转页面
+    移动端用户请使用侧边栏导航
     """
-    pages = get_page_config()
-    
-    # 构建导航链接HTML
-    nav_items = ""
-    for page in pages:
-        nav_items += f'''
-        <a href=".{page['path']}" title="{page['name']}">
-            <span>{page['icon']}</span>
-            {page['name']}
-        </a>
-        '''
-    
-    # 注入CSS和HTML
-    st.markdown(f'''
-    <style>
-    /* 底部导航栏样式 */
-    .mobile-nav {{
-        position: fixed !important;
-        bottom: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        background: white !important;
-        border-top: 1px solid #e0e0e0 !important;
-        display: flex !important;
-        justify-content: space-around !important;
-        padding: 8px 0 !important;
-        z-index: 9999 !important;
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.1) !important;
-    }}
-    
-    .mobile-nav a {{
-        text-decoration: none !important;
-        color: #666 !important;
-        text-align: center !important;
-        font-size: 11px !important;
-        flex: 1 !important;
-        transition: color 0.2s !important;
-    }}
-    
-    .mobile-nav a:hover,
-    .mobile-nav a:active {{
-        color: #FF4B4B !important;
-    }}
-    
-    .mobile-nav a span {{
-        display: block !important;
-        font-size: 22px !important;
-        margin-bottom: 2px !important;
-    }}
-    
-    /* 底部导航占位（防止内容被遮挡） */
-    .nav-placeholder {{
-        height: 60px !important;
-        width: 100% !important;
-    }}
-    
-    /* 深色模式适配 */
-    @media (prefers-color-scheme: dark) {{
-        .mobile-nav {{
-            background: #1a1a1a !important;
-            border-top-color: #333 !important;
-        }}
-        
-        .mobile-nav a {{
-            color: #aaa !important;
-        }}
-        
-        .mobile-nav a:hover {{
-            color: #FF6B6B !important;
-        }}
-    }}
-    
-    /* 仅在移动端显示 */
-    @media (min-width: 769px) {{
-        .mobile-nav {{
-            display: none !important;
-        }}
-        
-        .nav-placeholder {{
-            display: none !important;
-        }}
-    }}
-    </style>
-    
-    <nav class="mobile-nav">
-        {nav_items}
-    </nav>
-    ''', unsafe_allow_html=True)
+    # 不再渲染底部导航栏
+    # 侧边栏在移动端会自动适配，无需额外导航
+    pass
 
 
 def render_nav_placeholder():
     """
     渲染底部导航占位元素
-    防止页面内容被底部导航遮挡
+    预留空间防止内容被遮挡（已禁用导航，占位符不再需要）
     """
-    st.markdown('''
-    <div class="nav-placeholder"></div>
-    <style>
-    @media (max-width: 768px) {
-        .nav-placeholder {
-            display: block;
-        }
-    }
-    @media (min-width: 769px) {
-        .nav-placeholder {
-            display: none;
-        }
-    }
-    </style>
-    ''', unsafe_allow_html=True)
+    # 占位符不再需要
+    pass
 
 
 def is_mobile_device() -> bool:
     """
     检测是否为移动设备
-    通过Streamlit的查询参数判断
     
     Returns:
         是否为移动设备
     """
-    # Streamlit Cloud 会传递相关参数
-    # 简化判断：通过用户代理或其他方式
-    # 实际使用时可以通过JS注入检测
-    return False  # 默认返回False，由CSS媒体查询处理
+    return False

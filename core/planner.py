@@ -11,6 +11,48 @@ from api.client_12306 import Client12306
 from api.cache import QueryCache
 from loguru import logger
 
+# 统一的换乘枢纽站列表（与demo_data.py、transfer.py保持一致）
+TRANSFER_HUBS = [
+    # 华北
+    "北京", "北京西", "北京南",
+    # 华东
+    "上海", "上海虹桥",
+    # 华南
+    "广州", "广州南",
+    "深圳", "深圳北",
+    # 华中
+    "武汉", "汉口", "武昌",
+    "长沙", "长沙南",
+    "郑州", "郑州东",
+    # 西南
+    "成都", "成都东",
+    "重庆", "重庆北", "重庆西",
+    # 西北
+    "西安", "西安北",
+    # 其他重要枢纽
+    "南京", "南京南",
+    "杭州", "杭州东",
+    "合肥",
+    "贵阳", "贵阳北",
+    "昆明", "昆明南",
+    "南昌", "南昌西",
+    "济南",
+    "青岛", "青岛北",
+    "沈阳", "沈阳北",
+    "大连",
+    "哈尔滨", "哈尔滨西",
+    "长春", "长春西",
+    "福州", "福州南",
+    "厦门", "厦门北",
+    "兰州", "兰州西",
+    "西宁",
+    "太原", "太原南",
+    "石家庄",
+    "南宁",
+    "海口", "海口东",
+    "乌鲁木齐", "乌鲁木齐南",
+]
+
 
 @dataclass
 class TrainRoute:
@@ -353,6 +395,7 @@ class RoutePlanner:
         规则：
         1. 第二程出发时间 >= 第一程到达时间 + min_wait分钟
         2. 需要处理跨天情况（如第一程23:50到达，第二程00:30出发）
+        3. 如果等待时间超过12小时，不建议换乘（太久不合理）
         
         Args:
             leg1: 第一程路线
@@ -363,26 +406,32 @@ class RoutePlanner:
             是否可以衔接
         """
         try:
+            wait_minutes = self._can_transfer_minutes(leg1.arrive_time, leg2.depart_time)
+            
+            # 判断是否跨天：如果第二程出发时间 < 第一程到达时间，说明是次日发车
             arrive_mins = self._time_to_minutes(leg1.arrive_time)
             depart_mins = self._time_to_minutes(leg2.depart_time)
+            is_cross_day = depart_mins < arrive_mins
             
-            # 计算等待时间
-            wait = depart_mins - arrive_mins
-            
-            # 处理跨天：如果第二程在第一程到达之前出发，说明跨天
-            if wait < 0:
-                wait += 1440
-                
-            # 判断是否满足最小等待时间
-            can_transfer = wait >= min_wait
-            
-            if not can_transfer:
+            # 如果跨天，等待时间已经+1440（24小时）
+            # 检查是否满足最小等待时间
+            if wait_minutes < min_wait:
                 logger.debug(
                     f"换乘不可行: {leg1.arrive_time}→{leg2.depart_time}, "
-                    f"等待{wait}分钟 < {min_wait}分钟"
+                    f"等待{wait_minutes}分钟 < {min_wait}分钟"
                 )
+                return False
+            
+            # 检查等待时间是否过长（超过12小时不合理）
+            max_reasonable_wait = 12 * 60  # 12小时
+            if wait_minutes > max_reasonable_wait:
+                logger.debug(
+                    f"换乘等待时间过长: {leg1.arrive_time}→{leg2.depart_time}, "
+                    f"等待{wait_minutes}分钟 > {max_reasonable_wait}分钟（{('跨天' if is_cross_day else '同日')}）"
+                )
+                return False
                 
-            return can_transfer
+            return True
             
         except Exception as e:
             logger.warning(f"检查换乘衔接失败: {e}")
@@ -401,31 +450,5 @@ class RoutePlanner:
         Returns:
             可能的换乘站点列表（按优先级排序）
         """
-        # Demo模式：使用有数据的中转站
-        if self.client.demo_mode:
-            demo_hubs = ["长沙南", "广州南", "深圳北", "武汉", "杭州东"]
-            # 根据起终点筛选相关枢纽
-            prioritized = []
-            for hub in demo_hubs:
-                if hub != from_station and hub != to_station:
-                    prioritized.append(hub)
-            return prioritized
-        
-        # 常用中转枢纽（按地理位置分组）
-        major_hubs = [
-            # 华中
-            "长沙南", "武汉", "郑州东", "南昌西",
-            # 华南
-            "广州南", "深圳北", "南宁东", "桂林北",
-            # 华东
-            "上海虹桥", "南京南", "杭州东", "合肥南",
-            # 华北
-            "北京西", "北京南", "石家庄",
-            # 西南
-            "成都东", "重庆北", "重庆西", "贵阳北", "昆明南",
-            # 西北
-            "西安北", "兰州西", "西宁",
-        ]
-        
         # 过滤掉起终点
-        return [s for s in major_hubs if s != from_station and s != to_station]
+        return [s for s in TRANSFER_HUBS if s != from_station and s != to_station]

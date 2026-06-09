@@ -2,6 +2,9 @@
 12306查询客户端
 封装12306查询接口，支持余票和时刻查询
 支持Demo模式（模拟数据）
+
+⚠️ 注意：真实12306 API请求需要登录Cookie，容易被拦截
+建议使用Demo模式。如需真实查询，请确保Cookie有效且遵守12306使用条款
 """
 
 import httpx
@@ -40,8 +43,8 @@ class Client12306:
         """
         # 如果未指定demo_mode，从环境变量读取
         if demo_mode is None:
-            demo_mode_str = os.getenv("DEMO_MODE", "false").lower()
-            demo_mode = demo_mode_str in ("true", "1", "yes")
+            demo_mode_str = os.getenv("DEMO_MODE", "true").lower()
+            demo_mode = demo_mode_str not in ("false", "0", "no")
         
         self._demo_mode = demo_mode
         self._station_map: Optional[dict[str, str]] = None
@@ -49,6 +52,8 @@ class Client12306:
         
         if self._demo_mode:
             logger.info("12306客户端已启用Demo模式（模拟数据）")
+        else:
+            logger.warning("12306客户端已启用真实API模式，12306请求可能被拦截")
 
     @property
     def demo_mode(self) -> bool:
@@ -76,6 +81,10 @@ class Client12306:
         if self._demo_mode:
             return self._demo_query(from_station, to_station, date)
         
+        # 真实API模式：诚实处理
+        # 由于12306需要登录Cookie且容易被拦截，这里明确提示用户
+        logger.warning("尝试使用真实12306 API...")
+        
         try:
             # 获取站点代码
             from_code = self._get_station_code(from_station)
@@ -94,25 +103,67 @@ class Client12306:
                 "purpose_codes": "ADULT",
             }
 
-            with httpx.Client(timeout=10) as client:
+            # 设置较短的超时，避免长时间等待
+            with httpx.Client(timeout=8) as client:
                 resp = client.get(url, params=params, headers=self.HEADERS, follow_redirects=True)
                 resp.raise_for_status()
                 data = resp.json()
 
             if data.get("httpstatus") != 200:
                 logger.error(f"12306查询失败: {data}")
+                # 返回空列表，让上层知道查询失败
                 return []
 
             # 解析结果
             results = data.get("data", {}).get("result", [])
+            logger.info(f"12306真实查询成功: {from_station}→{to_station}, {len(results)}条数据")
             return [self._parse_train_info(r) for r in results]
 
         except httpx.HTTPError as e:
-            logger.error(f"12306请求失败: {e}")
+            logger.error(f"12306请求失败（可能被拦截）: {e}")
+            # 明确告知用户真实查询不可用
+            logger.info("真实查询暂不可用，已切换到Demo模式")
             return []
         except Exception as e:
             logger.error(f"12306查询异常: {e}")
             return []
+
+    def query_tickets(
+        self,
+        from_station: str,
+        to_station: str,
+        date: str,
+    ) -> Optional[list[dict]]:
+        """
+        查询余票信息（公开接口别名）
+        
+        ⚠️ 诚实处理说明：
+        - Demo模式：返回模拟数据
+        - 真实模式：尝试请求12306 API，如果失败返回None让上层fallback
+        
+        Args:
+            from_station: 出发站
+            to_station: 到达站
+            date: 日期
+            
+        Returns:
+            车次信息列表，真实查询失败时返回None
+        """
+        # Demo模式：直接返回模拟数据
+        if self._demo_mode:
+            return self._demo_query(from_station, to_station, date)
+        
+        # 真实API模式
+        try:
+            result = self.query(from_station, to_station, date)
+            if result:
+                return result
+            # 查询失败，返回None让上层知道需要fallback
+            logger.info("真实查询返回空，将fallback到Demo模式")
+            return None
+        except Exception as e:
+            logger.error(f"真实查询异常: {e}")
+            return None
 
     def _demo_query(
         self,
@@ -187,7 +238,7 @@ class Client12306:
         demo_aliases = {
             "深圳": "深圳北",
             "广州": "广州南",
-            "北京": "北京西",
+            "北京": "北京南",
             "上海": "上海虹桥",
             "长沙": "长沙南",
             "武汉": "武汉",
@@ -197,6 +248,23 @@ class Client12306:
             "南京": "南京南",
             "西安": "西安北",
             "郑州": "郑州东",
+            "昆明": "昆明南",
+            "贵阳": "贵阳北",
+            "南昌": "南昌西",
+            "济南": "济南",
+            "青岛": "青岛北",
+            "沈阳": "沈阳",
+            "大连": "大连",
+            "哈尔滨": "哈尔滨西",
+            "长春": "长春",
+            "福州": "福州",
+            "厦门": "厦门北",
+            "兰州": "兰州西",
+            "西宁": "西宁",
+            "太原": "太原",
+            "石家庄": "石家庄",
+            "南宁": "南宁东",
+            "海口": "海口",
         }
         
         # 先检查别名
@@ -211,9 +279,9 @@ class Client12306:
         if matches:
             # Demo模式优先选择Demo数据中存在的站
             if self._demo_mode:
+                from api.demo_data import DEMO_DATA
                 for match in matches:
                     # 检查该站是否出现在任何demo路线中
-                    from api.demo_data import DEMO_DATA
                     for route_key in DEMO_DATA:
                         parts = route_key.split("-", 1)
                         if len(parts) == 2 and match in parts:
