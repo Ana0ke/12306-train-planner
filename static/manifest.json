@@ -1,0 +1,27 @@
+{
+    "name": "12306省心小助手",
+    "short_name": "省心小助手",
+    "description": "一站式火车出行规划 + AI智能旅行攻略",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#FFFFFF",
+    "theme_color": "#FF4B4B",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/static/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/static/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": ["travel", "transportation", "utilities"],
+    "lang": "zh-CN",
+    "dir": "ltr"
+}

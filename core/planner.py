@@ -1,6 +1,7 @@
 """
 路线规划引擎 - 核心模块
 负责查询直达和换乘路线
+支持Demo模式换乘查询
 """
 
 from dataclasses import dataclass, field
@@ -99,22 +100,51 @@ class RoutePlanner:
         travel_date: str,
         max_transfers: int = 1,
     ) -> list[TrainRoute]:
-        """查询换乘路线（目前支持1次换乘）"""
+        """
+        查询换乘路线（目前支持1次换乘）
+        
+        Demo模式特殊处理：
+        - 当直达路线不存在时，自动尝试换乘方案
+        - 换乘站点使用 Demo 数据中已有的中转站
+        """
         cache_key = f"transfer:{from_station}:{to_station}:{travel_date}"
         cached = self.cache.get(cache_key)
         if cached:
             return cached
 
+        # 首先尝试直达
+        direct_routes = self.search(from_station, to_station, travel_date)
+        if direct_routes:
+            logger.info(f"直达路线找到: {from_station}→{to_station}, {len(direct_routes)}条")
+            return direct_routes
+
+        # Demo模式特殊处理：尝试两段式换乘
+        if self.client.demo_mode:
+            demo_transfer = self._demo_transfer_search(from_station, to_station, travel_date)
+            if demo_transfer:
+                self.cache.set(cache_key, demo_transfer, ttl=300)
+                return demo_transfer
+
         # 获取可中转站点
         transfer_stations = self._get_transfer_stations(from_station, to_station)
+        logger.info(f"尝试换乘站点: {transfer_stations[:5]}...")
 
         combined_routes = []
         for mid_station in transfer_stations:
+            # 跳过相同站
+            if mid_station == from_station or mid_station == to_station:
+                continue
+                
             try:
                 # 查第一程
                 leg1_list = self.search(from_station, mid_station, travel_date)
+                if not leg1_list:
+                    continue
+                    
                 # 查第二程
                 leg2_list = self.search(mid_station, to_station, travel_date)
+                if not leg2_list:
+                    continue
 
                 # 组合换乘方案
                 for leg1 in leg1_list:
@@ -131,6 +161,50 @@ class RoutePlanner:
         combined_routes.sort(key=lambda r: r.duration_minutes)
         self.cache.set(cache_key, combined_routes[:20], ttl=300)
         return combined_routes[:20]
+
+    def _demo_transfer_search(
+        self,
+        from_station: str,
+        to_station: str,
+        travel_date: str,
+    ) -> list[TrainRoute]:
+        """
+        Demo模式专用换乘搜索
+        
+        Demo数据中的换乘路线：
+        - 东安东→永州→深圳北/广州南
+        - 永州→深圳北/广州南
+        
+        Args:
+            from_station: 出发站
+            to_station: 到达站
+            travel_date: 旅行日期
+            
+        Returns:
+            换乘方案列表
+        """
+        from api.demo_data import get_demo_transfer_routes
+        
+        # 尝试获取换乘路线
+        leg1_data, leg2_data = get_demo_transfer_routes(from_station, to_station)
+        
+        if not leg1_data or not leg2_data:
+            return []
+        
+        # 解析为 TrainRoute
+        leg1_list = [self._parse_route(r) for r in leg1_data]
+        leg2_list = [self._parse_route(r) for r in leg2_data]
+        
+        combined_routes = []
+        for leg1 in leg1_list:
+            for leg2 in leg2_list:
+                # Demo模式：假设换乘等待时间足够（30分钟）
+                if self._can_transfer(leg1, leg2, min_wait=10):
+                    combined = self._combine_routes(leg1, leg2)
+                    combined_routes.append(combined)
+        
+        logger.info(f"Demo换乘找到 {len(combined_routes)} 条方案")
+        return combined_routes
 
     def _parse_route(self, raw: dict) -> TrainRoute:
         """解析原始数据为TrainRoute对象"""
@@ -316,11 +390,43 @@ class RoutePlanner:
             return False
 
     def _get_transfer_stations(self, from_station: str, to_station: str) -> list[str]:
-        """获取可能的换乘站点"""
-        # 常用中转枢纽
+        """
+        获取可能的换乘站点列表
+        
+        Demo模式特殊处理：优先使用有Demo数据的中转站
+        
+        Args:
+            from_station: 出发站
+            to_station: 到达站
+            
+        Returns:
+            可能的换乘站点列表（按优先级排序）
+        """
+        # Demo模式：使用有数据的中转站
+        if self.client.demo_mode:
+            demo_hubs = ["永州", "长沙南", "广州南", "深圳北"]
+            # 根据起终点筛选相关枢纽
+            prioritized = []
+            for hub in demo_hubs:
+                if hub != from_station and hub != to_station:
+                    prioritized.append(hub)
+            return prioritized
+        
+        # 常用中转枢纽（按地理位置分组）
         major_hubs = [
-            "长沙南", "武汉", "郑州东", "广州南", "北京西",
-            "上海虹桥", "南京南", "杭州东", "成都东", "重庆西",
-            "西安北", "贵阳北", "南宁东", "昆明南", "永州",
+            # 华中
+            "长沙南", "武汉", "郑州东", "南昌西",
+            # 华南
+            "广州南", "深圳北", "南宁东", "桂林北",
+            # 华东
+            "上海虹桥", "南京南", "杭州东", "合肥南",
+            # 华北
+            "北京西", "北京南", "石家庄",
+            # 西南
+            "成都东", "重庆北", "重庆西", "贵阳北", "昆明南",
+            # 西北
+            "西安北", "兰州西", "西宁",
         ]
-        return major_hubs
+        
+        # 过滤掉起终点
+        return [s for s in major_hubs if s != from_station and s != to_station]

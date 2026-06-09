@@ -7,14 +7,14 @@
 import httpx
 import os
 from loguru import logger
-from typing import Optional, Optional
+from typing import Optional
 from dotenv import load_dotenv
 
 # 加载环境变量
 load_dotenv()
 
 # 导入demo数据
-from api.demo_data import get_demo_routes, has_demo_data
+from api.demo_data import get_demo_routes, has_demo_data, get_demo_transfer_routes
 
 
 class Client12306:
@@ -72,19 +72,9 @@ class Client12306:
         Returns:
             车次信息列表
         """
-        # Demo模式：直接返回模拟数据
+        # Demo模式：使用模糊匹配查询模拟数据
         if self._demo_mode:
-            # 尝试模糊匹配站点名
-            from_station = self._auto_resolve_station(from_station)
-            to_station = self._auto_resolve_station(to_station)
-            
-            demo_routes = get_demo_routes(from_station, to_station)
-            if demo_routes:
-                logger.info(f"Demo模式返回 {len(demo_routes)} 条模拟数据: {from_station}→{to_station}")
-                return demo_routes
-            else:
-                logger.info(f"Demo模式: 暂无 {from_station}→{to_station} 的模拟数据")
-                return []
+            return self._demo_query(from_station, to_station, date)
         
         try:
             # 获取站点代码
@@ -124,9 +114,61 @@ class Client12306:
             logger.error(f"12306查询异常: {e}")
             return []
 
+    def _demo_query(
+        self,
+        from_station: str,
+        to_station: str,
+        date: str,
+    ) -> list[dict]:
+        """
+        Demo模式查询：支持模糊匹配
+        
+        策略：
+        1. 先用原始站名精确/模糊匹配
+        2. 如果没找到，尝试自动解析站名
+        3. Demo模式特殊处理：如果两段都有数据，返回第一程（换乘将由planner处理）
+        
+        Args:
+            from_station: 出发站
+            to_station: 到达站
+            date: 日期
+            
+        Returns:
+            车次信息列表
+        """
+        # 1. 尝试直接模糊匹配
+        routes = get_demo_routes(from_station, to_station)
+        if routes:
+            logger.info(f"Demo模式找到直达路线: {from_station}→{to_station}, {len(routes)}条数据")
+            return routes
+        
+        # 2. 尝试自动解析站名（处理"深圳" → "深圳北"等）
+        resolved_from = self._auto_resolve_station(from_station)
+        resolved_to = self._auto_resolve_station(to_station)
+        
+        if resolved_from != from_station or resolved_to != to_station:
+            routes = get_demo_routes(resolved_from, resolved_to)
+            if routes:
+                logger.info(f"Demo模式站名解析后找到路线: {resolved_from}→{resolved_to}, {len(routes)}条数据")
+                return routes
+        
+        # 3. 尝试换乘匹配（返回第一程）
+        leg1, leg2 = get_demo_transfer_routes(from_station, to_station)
+        if leg1:
+            logger.info(f"Demo模式找到换乘路线（返回第一程）: {from_station}→..., {len(leg1)}条数据")
+            # 返回第一程，planner会组合换乘
+            return leg1
+        
+        logger.info(f"Demo模式: 暂无 {from_station}→{to_station} 的模拟数据")
+        return []
+
     def _auto_resolve_station(self, station_name: str) -> str:
         """
         自动解析站名：精确匹配优先，否则模糊匹配取第一个
+        
+        Demo模式特殊处理：
+        - "深圳" → "深圳北"（优先匹配Demo数据中存在的站）
+        - "广州" → "广州南"
         
         Args:
             station_name: 用户输入的站名
@@ -134,13 +176,54 @@ class Client12306:
         Returns:
             解析后的标准站名
         """
+        if not station_name:
+            return station_name
+        
         # 精确匹配
         if self._get_station_code(station_name):
             return station_name
         
+        # Demo模式特殊映射（将常见简称映射到Demo数据中的站名）
+        demo_aliases = {
+            "深圳": "深圳北",
+            "广州": "广州南",
+            "北京": "北京西",
+            "上海": "上海虹桥",
+            "长沙": "长沙南",
+            "武汉": "武汉",
+            "成都": "成都东",
+            "重庆": "重庆北",
+            "杭州": "杭州东",
+            "南京": "南京南",
+            "西安": "西安北",
+            "郑州": "郑州东",
+        }
+        
+        # 先检查别名
+        alias_name = demo_aliases.get(station_name)
+        if alias_name:
+            routes = get_demo_routes(alias_name, alias_name)  # 只需要检查是否存在
+            # 如果别名在demo数据中，直接返回
+            for key in get_demo_routes.__self__ if hasattr(get_demo_routes, '__self__') else []:
+                pass
+            # 简化处理：直接检查demo数据
+            if has_demo_data(alias_name, alias_name):
+                return alias_name
+            # 再次尝试在demo数据中查找
+            routes = get_demo_routes(alias_name, "")
+            if routes:
+                return alias_name
+        
         # 模糊匹配
         matches = self.fuzzy_search_stations(station_name)
         if matches:
+            # Demo模式优先选择Demo数据中存在的站
+            if self._demo_mode:
+                for match in matches:
+                    if has_demo_data(match, match) or any(match in key for key in get_demo_routes.__self__ if hasattr(get_demo_routes, '__self__')):
+                        logger.info(f"Demo模式站名模糊匹配: '{station_name}' → '{match}'")
+                        return match
+            
             logger.info(f"站名模糊匹配: '{station_name}' → '{matches[0]}'")
             return matches[0]
         

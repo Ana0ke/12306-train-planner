@@ -138,29 +138,54 @@ if submitted:
 
                 st.success(f"找到 {len(sorted_routes)} 个方案！")
 
-                # 方案对比表
+                # 方案对比表 - 卡片化展示
                 st.markdown("### 📊 方案对比")
-                display_routes = []
-                for i, route in enumerate(sorted_routes[:10]):
-                    display_routes.append({
-                        "排名": i + 1,
-                        "车次": route.train_no,
-                        "出发→到达": f"{route.from_station}→{route.to_station}",
-                        "出发时间": route.depart_time,
-                        "到达时间": route.arrive_time,
-                        "历时": route.duration,
-                        "换乘": f"{route.transfers}次" if route.transfers > 0 else "直达",
-                        "参考票价": f"¥{route.price_low}~{route.price_high}",
-                        "综合评分": f"⭐ {route.score:.0f}/100",
-                    })
-                st.dataframe(display_routes, use_container_width=True, hide_index=True)
+                
+                # 顶部方案卡片
+                for i, route in enumerate(sorted_routes[:3]):
+                    rank_emoji = ["🥇", "🥈", "🥉"][i] if i < 3 else f"#{i+1}"
+                    score_color = "#FFD700" if i == 0 else "#C0C0C0" if i == 1 else "#CD7F32" if i == 2 else "#666"
+                    
+                    with st.container():
+                        st.markdown(f"""
+                        <div style="
+                            background: white;
+                            border-radius: 16px;
+                            padding: 16px;
+                            margin: 8px 0;
+                            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+                            border: 1px solid rgba(0,0,0,0.04);
+                        ">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <div style="display:flex; align-items:center;">
+                                    <span style="font-size:1.5rem; margin-right:12px;">{rank_emoji}</span>
+                                    <div>
+                                        <h4 style="margin:0; color:#004E89;">{route.train_no}</h4>
+                                        <p style="margin:4px 0 0; color:#666; font-size:0.9rem;">
+                                            {route.from_station} → {route.to_station}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div style="text-align:right;">
+                                    <div style="font-size:1.2rem; font-weight:bold; color:#FF6B35;">
+                                        {route.duration}
+                                    </div>
+                                    <div style="font-size:0.85rem; color:#666;">
+                                        ¥{route.price_low}~{route.price_high}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
                 # 详细方案卡片
                 st.markdown("### 📋 方案详情")
                 for i, route in enumerate(sorted_routes[:5]):
                     score_emoji = "🟢" if route.score >= 80 else "🟡" if route.score >= 60 else "🔴"
+                    rank_class = "rank-1" if i == 0 else "rank-2" if i == 1 else "rank-3" if i == 2 else ""
+                    
                     with st.expander(
-                        f"{score_emoji} 方案{i+1}：{route.train_no} | "
+                        f"{score_emoji} 方案{i+1} | {route.train_no} | "
                         f"{route.duration} | ¥{route.price_low}~{route.price_high} | "
                         f"评分 {route.score:.0f}",
                         expanded=(i == 0),
@@ -174,20 +199,26 @@ if submitted:
                                 st.markdown(f"🔄 换乘：{route.transfers}次")
                                 for t in route.transfer_details:
                                     st.markdown(f"  - {t}")
+                        
                         with col_b:
-                            st.markdown(f"💰 参考票价：")
+                            st.markdown("**💰 票价参考**")
+                            # 票价用色块区分
+                            price_items = []
                             if route.price_yz:
-                                st.markdown(f"  硬座：¥{route.price_yz}")
+                                price_items.append(f'<span class="ticket-chip ticket-yz">硬座 ¥{route.price_yz}</span>')
                             if route.price_rw:
-                                st.markdown(f"  硬卧：¥{route.price_rw}")
+                                price_items.append(f'<span class="ticket-chip ticket-rw">软座 ¥{route.price_rw}</span>')
                             if route.price_yw:
-                                st.markdown(f"  软卧：¥{route.price_yw}")
+                                price_items.append(f'<span class="ticket-chip ticket-yw">硬卧 ¥{route.price_yw}</span>')
                             if route.price_edz:
-                                st.markdown(f"  二等座：¥{route.price_edz}")
+                                price_items.append(f'<span class="ticket-chip ticket-edz">二等 ¥{route.price_edz}</span>')
                             if route.price_ydz:
-                                st.markdown(f"  一等座：¥{route.price_ydz}")
+                                price_items.append(f'<span class="ticket-chip ticket-ydz">一等 ¥{route.price_ydz}</span>')
                             if route.price_swb:
-                                st.markdown(f"  商务座：¥{route.price_swb}")
+                                price_items.append(f'<span class="ticket-chip ticket-swb">商务 ¥{route.price_swb}</span>')
+                            
+                            if price_items:
+                                st.markdown(" ".join(price_items), unsafe_allow_html=True)
 
                         st.info("⚠️ 以上信息仅供参考，实际票价和时刻请以12306为准")
             else:
@@ -200,8 +231,16 @@ if submitted:
 else:
     # 未查询时显示提示
     st.info("👆 输入出发地和目的地，选择偏好后点击查询")
-    st.markdown("### 💡 使用提示")
-    st.markdown("- 支持**直达**和**换乘**方案查询")
-    st.markdown("- 支持智能站名匹配：输入「长沙」会自动匹配「长沙」或「长沙南」")
-    st.markdown("- 5种筛选偏好可按需选择，默认推荐性价比最高的方案")
-    st.markdown("- 换乘方案会自动计算等待时间和换乘指引")
+    
+    # 使用提示卡片
+    st.markdown("""
+    <div class="feature-card">
+    <h4 style="color:#004E89; margin:0 0 12px;">💡 使用提示</h4>
+    <ul style="color:#333; font-size:0.9rem; padding-left:16px; margin:0;">
+        <li style="margin:6px 0;">支持<strong>直达</strong>和<strong>换乘</strong>方案查询</li>
+        <li style="margin:6px 0;">支持智能站名匹配：输入「长沙」会自动匹配「长沙」或「长沙南」</li>
+        <li style="margin:6px 0;">5种筛选偏好可按需选择，默认推荐性价比最高的方案</li>
+        <li style="margin:6px 0;">换乘方案会自动计算等待时间和换乘指引</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)

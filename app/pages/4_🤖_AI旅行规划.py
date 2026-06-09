@@ -53,7 +53,7 @@ def check_llm_config() -> bool:
 
 # ===== 页面标题 =====
 st.title("🤖 AI旅行规划")
-st.caption("告诉我想去哪里、玩几天，我来帮你规划！")
+st.markdown('<p style="color:#666;">告诉我想去哪里、玩几天，我来帮你规划！</p>', unsafe_allow_html=True)
 
 # ===== LLM配置检查 =====
 llm_configured = check_llm_config()
@@ -84,18 +84,20 @@ st.divider()
 # ===== Demo热门方案体验 =====
 st.markdown("### 🎯 热门方案体验（无需API Key）")
 
-# 展示热门目的地卡片
+# 展示热门目的地卡片 - 圆形按钮样式
 demo_cols = st.columns(5)
 for i, dest in enumerate(POPULAR_DESTINATIONS):
     with demo_cols[i]:
         # 显示目的地卡片
         with st.container():
-            st.markdown(f"#### {dest['emoji']} {dest['name']}")
-            st.caption(dest['desc'])
-            st.caption(f"📅 {dest['days']}日游")
-            highlights = "、".join(dest['highlights'][:2])
-            st.caption(f"🏷️ {highlights}...")
-
+            st.markdown(f"""
+            <div class="feature-card" style="text-align:center; padding:16px;">
+                <div style="font-size:2rem; margin-bottom:4px;">{dest['emoji']}</div>
+                <h4 style="margin:0; color:#004E89;">{dest['name']}</h4>
+                <p style="color:#666; font-size:0.8rem; margin:4px 0;">{dest['days']}日游</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
             if st.button(f"查看方案", key=f"demo_{dest['key']}", use_container_width=True):
                 # 获取demo方案
                 demo_plan = get_demo_plan_by_destination(dest['key'])
@@ -220,7 +222,7 @@ with st.form("ai_trip_form"):
 
             st.markdown(f"**👔 穿衣建议：** {season_info['clothes']}")
             st.markdown(f"**💡 注意事项：** {season_info['tips']}")
-            st.markdown(f"**🌸 季节推荐：** {seasonical_rec}")
+            st.markdown(f"**🌸 季节推荐：** {seasonal_rec}")
 
             if holiday_info.get("tips"):
                 st.markdown(f"**📌 出行建议：**")
@@ -343,7 +345,7 @@ def _display_trip_plan(plan: TripPlan, is_demo: bool = False):
     if is_demo:
         st.info("🎭 这是示例方案，可供参考。配置API Key生成专属方案！")
 
-    # 概览
+    # 概览卡片
     col_sum1, col_sum2, col_sum3 = st.columns(3)
 
     with col_sum1:
@@ -369,20 +371,39 @@ def _display_trip_plan(plan: TripPlan, is_demo: bool = False):
         st.markdown("### 🚂 推荐火车路线")
         tr = plan.train_route
         with st.container():
-            col_tr1, col_tr2 = st.columns([3, 1])
-            with col_tr1:
-                st.markdown(f"""
-                **{tr.train_no}次列车** | {tr.from_station} → {tr.to_station}
-
-                ⏰ **{tr.depart_time}** 出发 → **{tr.arrive_time}** 到达
-                🕐 历时：{tr.duration} | {tr.train_type}
-                {"🔄 换乘" + str(tr.transfers) + "次" if tr.transfers > 0 else "🟢 直达"}
-                """)
-            with col_tr2:
-                st.markdown(f"""
-                **票价参考**
-                {tr.price_range}
-                """)
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #004E89, #1A936F);
+                border-radius: 16px;
+                padding: 20px;
+                color: white;
+                margin: 8px 0;
+            ">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <h4 style="margin:0; color:white;">🚂 {tr.train_no}次列车</h4>
+                        <p style="margin:8px 0 0; opacity:0.9;">{tr.from_station} → {tr.to_station}</p>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:1.5rem; font-weight:bold;">{tr.depart_time} → {tr.arrive_time}</div>
+                        <p style="margin:4px 0 0; opacity:0.9;">{tr.duration} | {tr.train_type}</p>
+                    </div>
+                </div>
+                <div style="margin-top:12px; display:flex; gap:16px;">
+                    <span style="
+                        background: {'rgba(255,255,255,0.2)' if tr.transfers > 0 else 'rgba(26,147,111,0.8)'};
+                        padding: 4px 12px;
+                        border-radius: 12px;
+                        font-size: 0.9rem;
+                    ">
+                        {'🔄 换乘' + str(tr.transfers) + '次' if tr.transfers > 0 else '🟢 直达'}
+                    </span>
+                    <span style="background:rgba(255,107,53,0.8); padding:4px 12px; border-radius:12px;">
+                        💰 {tr.price_range}
+                    </span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             if tr.tips:
                 st.info(f"💡 {tr.tips}")
 
@@ -391,20 +412,37 @@ def _display_trip_plan(plan: TripPlan, is_demo: bool = False):
 
     for day in plan.days:
         with st.expander(f"**Day {day.day_number}** | {day.theme}", expanded=(day.day_number <= 2)):
-            # 活动时间轴
+            # 活动时间轴 - CSS样式
             if day.activities:
-                timeline_data = []
+                timeline_html = '<div class="timeline" style="padding-left:8px;">'
                 for act in day.activities:
                     start_time = act.time.split("-")[0] if "-" in act.time else "09:00"
-                    timeline_data.append({
-                        "时间": start_time,
-                        "活动": act.name,
-                        "详情": act.desc[:50] + "..." if len(act.desc) > 50 else act.desc,
-                        "提示": act.tip,
-                    })
-
-                if timeline_data:
-                    st.table(timeline_data)
+                    timeline_html += f'''
+                    <div class="timeline-item">
+                        <div style="
+                            background: white;
+                            border-radius: 12px;
+                            padding: 12px 16px;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                            border-left: 3px solid #FF6B35;
+                        ">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="
+                                    background: linear-gradient(135deg, #FF6B35, #FF8C42);
+                                    color: white;
+                                    padding: 2px 10px;
+                                    border-radius: 10px;
+                                    font-size: 0.85rem;
+                                ">{act.time}</span>
+                                <strong style="color:#004E89;">{act.name}</strong>
+                            </div>
+                            <p style="margin:8px 0 0; color:#666; font-size:0.9rem;">{act.desc}</p>
+                            {f'<p style="margin:4px 0 0; color:#1A936F; font-size:0.85rem;">💡 {act.tip}</p>' if act.tip else ''}
+                        </div>
+                    </div>
+                    '''
+                timeline_html += '</div>'
+                st.markdown(timeline_html, unsafe_allow_html=True)
 
             # 展开显示详情
             col_day1, col_day2 = st.columns(2)
@@ -441,6 +479,7 @@ def _display_trip_plan(plan: TripPlan, is_demo: bool = False):
             names="类别",
             title="费用占比",
             hole=0.4,
+            color_discrete_sequence=["#FF6B35", "#004E89", "#1A936F", "#9B59B6"]
         )
         fig_pie.update_layout(height=350)
         st.plotly_chart(fig_pie, use_container_width=True)
@@ -468,8 +507,18 @@ def _display_trip_plan(plan: TripPlan, is_demo: bool = False):
     # ===== 实用Tips =====
     if plan.tips:
         st.markdown("### 💡 实用Tips")
+        tips_html = '<div style="display:flex; flex-direction:column; gap:8px;">'
         for tip in plan.tips:
-            st.markdown(f"- {tip}")
+            tips_html += f'''
+            <div style="
+                background: linear-gradient(135deg, #1A936F22, #1A936F11);
+                border-left: 4px solid #1A936F;
+                border-radius: 8px;
+                padding: 12px 16px;
+            ">{tip}</div>
+            '''
+        tips_html += '</div>'
+        st.markdown(tips_html, unsafe_allow_html=True)
 
     # ===== 对话式调整（仅在非Demo模式下）=====
     if not is_demo and llm_configured:
@@ -533,8 +582,13 @@ if not st.session_state.trip_plan:
 
     for i, (emoji, title, desc) in enumerate(features):
         with feature_cols[i % 3]:
-            st.markdown(f"{emoji} **{title}**")
-            st.caption(desc)
+            st.markdown(f"""
+            <div class="feature-card" style="padding:12px;">
+                <div style="font-size:1.5rem; margin-bottom:4px;">{emoji}</div>
+                <h4 style="margin:0; color:#004E89; font-size:0.95rem;">{title}</h4>
+                <p style="color:#666; font-size:0.8rem; margin:4px 0 0;">{desc}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
     # ===== LLM配置提示（无API Key时）=====
     if not llm_configured:

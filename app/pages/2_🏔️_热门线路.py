@@ -14,6 +14,18 @@ st.caption("8条经典火车旅游线路，每条都有沿途攻略和乘车指�
 # 加载线路数据
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "routes"
 
+# 线路渐变色配置
+ROUTE_GRADIENTS = {
+    "qingzang": "background: linear-gradient(135deg, #4A90D9, #FFFFFF);",
+    "coastal": "background: linear-gradient(135deg, #4A90D9, #1A936F);",
+    "silkroad": "background: linear-gradient(135deg, #FF6B35, #FFD700);",
+    "chuanzang": "background: linear-gradient(135deg, #1A936F, #FFFFFF);",
+    "food": "background: linear-gradient(135deg, #FF4B4B, #FF6B35);",
+    "dongbei": "background: linear-gradient(135deg, #4A90D9, #9B59B6);",
+    "guilin": "background: linear-gradient(135deg, #1A936F, #00CED1);",
+    "yunnan": "background: linear-gradient(135deg, #FF69B4, #9B59B6);",
+}
+
 ROUTES_INDEX = [
     {
         "id": "qingzang",
@@ -97,23 +109,53 @@ ROUTES_INDEX = [
     },
 ]
 
-# 线路卡片展示
+# 线路卡片展示 - 带渐变条
 cols = st.columns(2)
 for i, route in enumerate(ROUTES_INDEX):
     with cols[i % 2]:
-        with st.container(border=True):
-            col_title, col_info = st.columns([3, 2])
-            with col_title:
-                st.markdown(f"### {route['name']}")
-                st.caption(route["subtitle"])
-                st.markdown(f"📍 **路线：** {route['route']}")
-            with col_info:
-                st.markdown(f"🕐 **耗时：** {route['duration']}")
-                st.markdown(f"🗓️ **最佳季节：** {route['best_season']}")
-                st.markdown(f"✨ **亮点：** {route['highlights']}")
-
+        gradient_style = ROUTE_GRADIENTS.get(route["id"], "background: linear-gradient(135deg, #FF6B35, #FF8C42);")
+        
+        with st.container():
+            st.markdown(f"""
+            <div style="
+                background: white;
+                border-radius: 16px;
+                overflow: hidden;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+                border: 1px solid rgba(0,0,0,0.04);
+            ">
+                <div style="{gradient_style}; height: 8px;"></div>
+                <div style="padding: 16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:start;">
+                        <div>
+                            <h3 style="margin:0; color:#004E89;">{route['name']}</h3>
+                            <p style="margin:4px 0 0; color:#666; font-size:0.9rem;">{route['subtitle']}</p>
+                        </div>
+                        <span style="
+                            display:inline-block;
+                            background: linear-gradient(135deg, #FF6B35, #FF8C42);
+                            color: white;
+                            border-radius: 12px;
+                            padding: 4px 12px;
+                            font-size: 0.8rem;
+                        ">{route['duration']}</span>
+                    </div>
+                    <hr style="margin:12px 0; border:none; height:1px; background:#f0f0f0;">
+                    <p style="margin:0 0 8px; color:#333; font-size:0.9rem;">
+                        <strong>📍 路线：</strong>{route['route']}
+                    </p>
+                    <p style="margin:0 0 8px; color:#333; font-size:0.9rem;">
+                        <strong>🗓️ 最佳季节：</strong>{route['best_season']}
+                    </p>
+                    <p style="margin:0; color:#666; font-size:0.85rem;">
+                        <strong>✨ 亮点：</strong>{route['highlights']}
+                    </p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
             # 查看详情按钮
-            if st.button("📖 查看攻略", key=f"detail_{route['id']}"):
+            if st.button(f"📖 查看攻略 - {route['name'].split()[1]}", key=f"detail_{route['id']}", use_container_width=True):
                 st.session_state["selected_route"] = route["id"]
                 st.rerun()
 
@@ -124,7 +166,24 @@ if "selected_route" in st.session_state:
 
     if route_info:
         st.divider()
-        st.markdown(f"## {route_info['name']} · {route_info['subtitle']}")
+        
+        # 详情页头部
+        gradient_style = ROUTE_GRADIENTS.get(route_id, "background: linear-gradient(135deg, #FF6B35, #FF8C42);")
+        st.markdown(f"""
+        <div style="
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            margin-bottom: 16px;
+        ">
+            <div style="{gradient_style}; height: 12px;"></div>
+            <div style="padding: 24px; text-align:center;">
+                <h2 style="margin:0; color:#004E89;">{route_info['name']} · {route_info['subtitle']}</h2>
+                <p style="margin:8px 0 0; color:#666;">{route_info['route']}</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         # 加载详细数据
         detail_file = DATA_DIR / f"{route_id}.json"
@@ -132,24 +191,52 @@ if "selected_route" in st.session_state:
             with open(detail_file, "r", encoding="utf-8") as f:
                 detail = json.load(f)
 
-            # 沿途站点
+            # 沿途站点卡片
             st.markdown("### 🚉 沿途站点")
+            stations_html = '<div style="display:flex; flex-wrap:wrap; gap:8px;">'
             for station in detail.get("stations", []):
-                st.markdown(f"- **{station['name']}** — {station.get('desc', '')}")
+                stations_html += f'''
+                <div style="
+                    background: white;
+                    border-radius: 12px;
+                    padding: 12px 16px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                    border-left: 3px solid #FF6B35;
+                ">
+                    <strong style="color:#004E89;">{station['name']}</strong>
+                    <p style="margin:4px 0 0; color:#666; font-size:0.85rem;">{station.get('desc', '')}</p>
+                </div>
+                '''
+            stations_html += '</div>'
+            st.markdown(stations_html, unsafe_allow_html=True)
 
             # 攻略信息
             if detail.get("guide"):
                 st.markdown("### 📖 旅行攻略")
-                st.markdown(detail["guide"])
+                st.markdown(f"""
+                <div class="feature-card">
+                {detail['guide']}
+                </div>
+                """, unsafe_allow_html=True)
 
             # 乘车建议
             if detail.get("tips"):
                 st.markdown("### 💡 乘车建议")
+                tips_html = '<div style="display:flex; flex-direction:column; gap:8px;">'
                 for tip in detail["tips"]:
-                    st.markdown(f"- {tip}")
+                    tips_html += f'''
+                    <div style="
+                        background: linear-gradient(135deg, #1A936F22, #1A936F11);
+                        border-left: 4px solid #1A936F;
+                        border-radius: 8px;
+                        padding: 12px 16px;
+                    ">{tip}</div>
+                    '''
+                tips_html += '</div>'
+                st.markdown(tips_html, unsafe_allow_html=True)
         else:
             st.info(f"📋 详细攻略正在编写中，敬请期待！")
 
-        if st.button("🔙 返回线路列表"):
+        if st.button("🔙 返回线路列表", use_container_width=True):
             del st.session_state["selected_route"]
             st.rerun()

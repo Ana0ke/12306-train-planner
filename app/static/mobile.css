@@ -1,0 +1,256 @@
+/* 
+ * 手机端适配样式
+ * 适配 768px 以下的移动设备
+ * 让 Streamlit 应用在手机上也能良好使用
+ */
+
+/* ===== 基础重置 ===== */
+@media (max-width: 768px) {
+    /* 隐藏侧边栏（手机上默认收起） */
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+    
+    /* 隐藏展开侧边栏按钮 */
+    [data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+    
+    /* ===== 布局调整 ===== */
+    
+    /* 让页面内容区占满宽度 */
+    .main .block-container {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        padding-top: 0.5rem !important;
+        padding-bottom: 80px !important; /* 底部导航占位 */
+        max-width: 100% !important;
+    }
+    
+    /* 调整Columns在小屏幕上为单列 */
+    [data-testid="column"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* 表格横向滚动 */
+    .stDataFrame {
+        overflow-x: auto !important;
+        font-size: 0.85rem !important;
+    }
+    
+    /* 表格单元格适配 */
+    .stDataFrame td, .stDataFrame th {
+        white-space: nowrap !important;
+        padding: 0.5rem !important;
+    }
+    
+    /* ===== 字体大小调整 ===== */
+    h1 {
+        font-size: 1.5rem !important;
+        line-height: 1.3 !important;
+    }
+    
+    h2 {
+        font-size: 1.3rem !important;
+        line-height: 1.3 !important;
+    }
+    
+    h3 {
+        font-size: 1.1rem !important;
+        line-height: 1.3 !important;
+    }
+    
+    p, .stText, .stMarkdown {
+        font-size: 0.9rem !important;
+        line-height: 1.5 !important;
+    }
+    
+    /* ===== 表单和输入框适配 ===== */
+    /* 防止iOS自动缩放 */
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    input[type="password"],
+    textarea,
+    select {
+        font-size: 16px !important; /* iOS需要16px防止缩放 */
+        padding: 0.5rem !important;
+    }
+    
+    /* ===== 按钮适配 ===== */
+    .stButton > button {
+        width: 100% !important;
+        padding: 0.6rem 1rem !important;
+        font-size: 0.95rem !important;
+    }
+    
+    .stFormSubmitButton > button {
+        width: 100% !important;
+    }
+    
+    /* 下载按钮全宽 */
+    .stDownloadButton > button {
+        width: 100% !important;
+    }
+    
+    /* ===== 卡片和容器适配 ===== */
+    .stCard {
+        padding: 0.75rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Metrics 适配 */
+    [data-testid="stMetric"] {
+        padding: 0.5rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        font-size: 0.8rem !important;
+    }
+    
+    [data-testid="stMetricValue"] {
+        font-size: 1.2rem !important;
+    }
+    
+    /* ===== Expander 适配 ===== */
+    .streamlit-expanderHeader {
+        font-size: 0.95rem !important;
+        padding: 0.5rem !important;
+    }
+    
+    /* ===== 图表适配 ===== */
+    .js-plotly-plot {
+        max-width: 100% !important;
+    }
+    
+    /* ===== 底部固定导航栏 ===== */
+    .mobile-nav {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        background: white !important;
+        border-top: 1px solid #e0e0e0 !important;
+        display: flex !important;
+        justify-content: space-around !important;
+        padding: 8px 0 !important;
+        z-index: 9999 !important;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1) !important;
+    }
+    
+    .mobile-nav a {
+        text-decoration: none !important;
+        color: #666 !important;
+        text-align: center !important;
+        font-size: 12px !important;
+        flex: 1 !important;
+    }
+    
+    .mobile-nav a.active {
+        color: #FF4B4B !important;
+    }
+    
+    .mobile-nav a span {
+        display: block !important;
+        font-size: 20px !important;
+    }
+    
+    /* ===== 进度条和通知 ===== */
+    .stSuccess, .stWarning, .stError, .stInfo {
+        padding: 0.75rem !important;
+        font-size: 0.9rem !important;
+    }
+    
+    /* ===== Tabs 适配 ===== */
+    .stTabs button {
+        font-size: 0.85rem !important;
+        padding: 0.5rem !important;
+    }
+    
+    /* ===== Checkbox 和 Radio 适配 ===== */
+    .stCheckbox label, .stRadio label {
+        font-size: 0.9rem !important;
+    }
+    
+    /* ===== Code 块适配 ===== */
+    code, pre {
+        font-size: 0.8rem !important;
+        white-space: pre-wrap !important;
+        word-break: break-all !important;
+    }
+    
+    /* ===== Divider 适配 ===== */
+    hr {
+        margin: 0.75rem 0 !important;
+    }
+    
+    /* ===== 图片自适应 ===== */
+    img {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+    
+    /* ===== 隐藏不必要的元素 ===== */
+    .stDeployButton {
+        display: none !important;
+    }
+}
+
+/* ===== 平板适配 (768px - 1024px) ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .main .block-container {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+}
+
+/* ===== 横屏手机适配 ===== */
+@media (max-width: 768px) and (orientation: landscape) {
+    .main .block-container {
+        padding-bottom: 20px !important; /* 横屏时底部空间小一些 */
+    }
+    
+    h1 {
+        font-size: 1.3rem !important;
+    }
+    
+    h2 {
+        font-size: 1.1rem !important;
+    }
+}
+
+/* ===== 深色模式适配 (可选) ===== */
+@media (prefers-color-scheme: dark) {
+    .mobile-nav {
+        background: #1a1a1a !important;
+        border-top-color: #333 !important;
+    }
+    
+    .mobile-nav a {
+        color: #aaa !important;
+    }
+    
+    .mobile-nav a.active {
+        color: #FF6B6B !important;
+    }
+}
+
+/* ===== 滚动条美化 ===== */
+@media (max-width: 768px) {
+    ::-webkit-scrollbar {
+        width: 6px !important;
+        height: 6px !important;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1 !important;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: #888 !important;
+        border-radius: 3px !important;
+    }
+}
