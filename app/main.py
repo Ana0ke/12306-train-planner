@@ -3,6 +3,14 @@
 """
 
 import os
+import sys
+from pathlib import Path
+
+# ===== 路径修复：确保项目根目录在 sys.path 中 =====
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 import streamlit as st
 
 # ===== Streamlit Cloud 兼容：优先从 secrets.toml 读取配置 =====

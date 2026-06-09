@@ -1,3 +1,10 @@
+"""路径修复：确保项目根目录在 sys.path 中"""
+import sys
+from pathlib import Path
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 """
 12306省心小助手 - AI旅行规划页面
 对话式生成个性化旅行方案
