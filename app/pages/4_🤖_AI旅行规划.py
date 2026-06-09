@@ -316,7 +316,7 @@ if submitted:
 
                     # 显示路线方案
                     if train_info:
-                        data_source = "🟢 实时数据" if client_12306.using_mcp else "📊 演示数据"
+                        data_source = "🟢 12306实时" if client_12306.use_realtime else "📊 演示数据"
                         st.success(f"找到最优路线：{train_info['train_no']} {train_info['depart_time']}→{train_info['arrive_time']} [{data_source}]")
 
                 except Exception as e:

@@ -1,16 +1,19 @@
 """
 12306查询客户端
-封装12306查询接口，支持余票和时刻查询
-支持Demo模式（模拟数据）
+支持内嵌实时查询和Demo模式
 
-⚠️ 注意：真实12306 API请求需要登录Cookie，容易被拦截
-建议使用Demo模式。如需真实查询，请确保Cookie有效且遵守12306使用条款
+查询策略（按优先级）：
+1. USE_REALTIME=true → RealtimeClient真实查询
+2. DEMO_MODE=true → Demo模拟数据（默认）
+
+注意：
+- 真实12306查询依赖正确的Cookie，容易被拦截
+- 建议设置环境变量 USE_REALTIME=false 禁用真实查询
 """
 
-import httpx
 import os
 from loguru import logger
-from typing import Optional
+from typing import Optional, List
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -19,15 +22,14 @@ load_dotenv()
 # 导入demo数据
 from api.demo_data import get_demo_routes, has_demo_data, get_demo_transfer_routes
 
-# 导入MCP客户端
-from api.mcp_client import MCPClient
+# 导入真实查询客户端
+from api.realtime_client import RealtimeClient
 
 
 class Client12306:
     """12306查询客户端"""
 
-    # 12306查询接口
-    QUERY_URL = "https://kyfw.12306.cn/otn/leftTicket/query"
+    # 12306官方站点数据URL（用于备用）
     STATION_URL = "https://kyfw.12306.cn/otn/resources/js/framework/station_name.js"
 
     # 请求头
@@ -37,50 +39,52 @@ class Client12306:
         "Referer": "https://kyfw.12306.cn/otn/leftTicket/init",
     }
 
-    def __init__(self, demo_mode: Optional[bool] = None):
+    def __init__(self, demo_mode: Optional[bool] = None, use_realtime: Optional[bool] = None):
         """
         初始化12306客户端
         
         Args:
             demo_mode: 是否启用Demo模式，None时从环境变量DEMO_MODE读取
-                      注意：如果配置了MCP_SERVER_URL，会自动使用MCP真实查询
+            use_realtime: 是否使用真实查询，None时从环境变量USE_REALTIME读取
         """
-        # 如果未指定demo_mode，从环境变量读取
+        # Demo模式
         if demo_mode is None:
             demo_mode_str = os.getenv("DEMO_MODE", "true").lower()
             demo_mode = demo_mode_str not in ("false", "0", "no")
-        
         self._demo_mode = demo_mode
+        
+        # 真实查询模式
+        if use_realtime is None:
+            use_realtime_str = os.getenv("USE_REALTIME", "false").lower()
+            use_realtime = use_realtime_str in ("true", "1", "yes")
+        self._use_realtime = use_realtime
+        
         self._station_map: Optional[dict[str, str]] = None
-        self._station_names: Optional[list[str]] = None  # 用于模糊搜索
+        self._station_names: Optional[list[str]] = None
         
-        # 初始化MCP客户端
-        mcp_server_url = os.getenv("MCP_SERVER_URL", "").strip()
-        self._mcp_client: Optional[MCPClient] = None
-        
-        if mcp_server_url:
-            self._mcp_client = MCPClient(mcp_server_url)
-            if self._mcp_client.is_available():
-                logger.info(f"12306客户端已启用MCP模式（{mcp_server_url}）")
-            else:
-                logger.warning(f"MCP服务不可用（{mcp_server_url}），将使用Demo模式")
+        # 初始化RealtimeClient
+        self._realtime_client: Optional[RealtimeClient] = None
+        if self._use_realtime:
+            try:
+                self._realtime_client = RealtimeClient()
+                if self._realtime_client.is_available():
+                    logger.info("12306客户端已启用实时查询模式")
+                else:
+                    logger.warning("12306服务不可用，将使用Demo模式")
+                    self._use_realtime = False
+                    self._demo_mode = True
+            except Exception as e:
+                logger.warning(f"初始化RealtimeClient失败: {e}，将使用Demo模式")
+                self._use_realtime = False
                 self._demo_mode = True
-        elif self._demo_mode:
+        
+        if self._demo_mode:
             logger.info("12306客户端已启用Demo模式（模拟数据）")
-        else:
-            logger.warning("12306客户端已启用真实API模式（仅Demo，无MCP），12306请求可能被拦截")
     
     @property
-    def mcp_available(self) -> bool:
-        """MCP服务是否可用"""
-        if self._mcp_client is None:
-            return False
-        return self._mcp_client.is_available()
-    
-    @property
-    def using_mcp(self) -> bool:
-        """当前是否使用MCP模式"""
-        return self.mcp_available and not self._demo_mode
+    def use_realtime(self) -> bool:
+        """是否使用真实查询"""
+        return self._use_realtime and self._realtime_client is not None
 
     @property
     def demo_mode(self) -> bool:
@@ -92,7 +96,7 @@ class Client12306:
         from_station: str,
         to_station: str,
         date: str,
-    ) -> list[dict]:
+    ) -> List[dict]:
         """
         查询车次信息
 
@@ -104,83 +108,37 @@ class Client12306:
         Returns:
             车次信息列表
         """
-        # Demo模式：使用模糊匹配查询模拟数据
-        if self._demo_mode:
-            return self._demo_query(from_station, to_station, date)
-        
-        # MCP模式优先
-        if self._mcp_client and self._mcp_client.is_available():
+        # 实时查询优先
+        if self.use_realtime:
             try:
-                mcp_tickets = self._mcp_client.query_tickets(
+                realtime_tickets = self._realtime_client.query_tickets(
                     from_station=from_station,
                     to_station=to_station,
                     date=date,
                 )
-                if mcp_tickets:
-                    logger.info(f"MCP查询成功: {from_station}→{to_station}, {len(mcp_tickets)}条数据")
-                    return mcp_tickets
+                if realtime_tickets:
+                    logger.info(
+                        f"实时查询成功: {from_station}→{to_station}, "
+                        f"{len(realtime_tickets)}条数据"
+                    )
+                    return realtime_tickets
             except Exception as e:
-                logger.warning(f"MCP查询失败: {e}")
+                logger.warning(f"实时查询失败: {e}，将fallback到Demo模式")
         
-        # 真实API模式：诚实处理（无MCP时）
-        # 由于12306需要登录Cookie且容易被拦截，这里明确提示用户
-        logger.warning("尝试使用真实12306 API...")
+        # Demo模式fallback
+        if self._demo_mode:
+            return self._demo_query(from_station, to_station, date)
         
-        try:
-            # 获取站点代码
-            from_code = self._get_station_code(from_station)
-            to_code = self._get_station_code(to_station)
-
-            if not from_code or not to_code:
-                logger.warning(f"未找到站点代码: {from_station}({from_code}) → {to_station}({to_code})")
-                return []
-
-            # 构建查询URL
-            url = f"{self.QUERY_URL}"
-            params = {
-                "leftTicketDTO.train_date": date,
-                "leftTicketDTO.from_station": from_code,
-                "leftTicketDTO.to_station": to_code,
-                "purpose_codes": "ADULT",
-            }
-
-            # 设置较短的超时，避免长时间等待
-            with httpx.Client(timeout=8) as client:
-                resp = client.get(url, params=params, headers=self.HEADERS, follow_redirects=True)
-                resp.raise_for_status()
-                data = resp.json()
-
-            if data.get("httpstatus") != 200:
-                logger.error(f"12306查询失败: {data}")
-                # 返回空列表，让上层知道查询失败
-                return []
-
-            # 解析结果
-            results = data.get("data", {}).get("result", [])
-            logger.info(f"12306真实查询成功: {from_station}→{to_station}, {len(results)}条数据")
-            return [self._parse_train_info(r) for r in results]
-
-        except httpx.HTTPError as e:
-            logger.error(f"12306请求失败（可能被拦截）: {e}")
-            # 明确告知用户真实查询不可用
-            logger.info("真实查询暂不可用，已切换到Demo模式")
-            return []
-        except Exception as e:
-            logger.error(f"12306查询异常: {e}")
-            return []
+        return []
 
     def query_tickets(
         self,
         from_station: str,
         to_station: str,
         date: str,
-    ) -> Optional[list[dict]]:
+    ) -> Optional[List[dict]]:
         """
-        查询余票信息（公开接口别名）
-        
-        查询策略（按优先级）：
-        1. MCP模式（MCP_SERVER_URL已配置且服务可用）→ 真实数据
-        2. Demo模式 → 模拟数据
+        查询余票信息
         
         Args:
             from_station: 出发站
@@ -190,50 +148,17 @@ class Client12306:
         Returns:
             车次信息列表，查询失败时返回None
         """
-        # 1. MCP模式优先
-        if self._mcp_client and self._mcp_client.is_available():
-            try:
-                mcp_tickets = self._mcp_client.query_tickets(
-                    from_station=from_station,
-                    to_station=to_station,
-                    date=date,
-                )
-                if mcp_tickets:
-                    logger.info(f"MCP查询成功: {from_station}→{to_station}, {len(mcp_tickets)}条数据")
-                    return mcp_tickets
-                else:
-                    logger.warning(f"MCP查询无数据，将fallback到Demo模式")
-            except Exception as e:
-                logger.warning(f"MCP查询异常: {e}，将fallback到Demo模式")
-        
-        # 2. Demo模式
-        if self._demo_mode:
-            return self._demo_query(from_station, to_station, date)
-        
-        # 非Demo模式的fallback
-        try:
-            result = self.query(from_station, to_station, date)
-            if result:
-                return result
-            logger.info("查询返回空，将fallback到Demo模式")
-            return self._demo_query(from_station, to_station, date)
-        except Exception as e:
-            logger.error(f"查询异常: {e}，将fallback到Demo模式")
-            return self._demo_query(from_station, to_station, date)
+        result = self.query(from_station, to_station, date)
+        return result if result else None
 
     def _demo_query(
         self,
         from_station: str,
         to_station: str,
         date: str,
-    ) -> list[dict]:
+    ) -> List[dict]:
         """
         Demo模式查询：支持模糊匹配
-        
-        策略：
-        1. 先用原始站名精确/模糊匹配
-        2. 如果没找到，尝试自动解析站名
-        3. Demo模式特殊处理：如果两段都有数据，返回第一程（换乘将由planner处理）
         
         Args:
             from_station: 出发站
@@ -249,7 +174,7 @@ class Client12306:
             logger.info(f"Demo模式找到直达路线: {from_station}→{to_station}, {len(routes)}条数据")
             return routes
         
-        # 2. 尝试自动解析站名（处理"深圳" → "深圳北"等）
+        # 2. 尝试自动解析站名
         resolved_from = self._auto_resolve_station(from_station)
         resolved_to = self._auto_resolve_station(to_station)
         
@@ -259,11 +184,10 @@ class Client12306:
                 logger.info(f"Demo模式站名解析后找到路线: {resolved_from}→{resolved_to}, {len(routes)}条数据")
                 return routes
         
-        # 3. 尝试换乘匹配（返回第一程）
+        # 3. 尝试换乘匹配
         leg1, leg2 = get_demo_transfer_routes(from_station, to_station)
         if leg1:
             logger.info(f"Demo模式找到换乘路线（返回第一程）: {from_station}→..., {len(leg1)}条数据")
-            # 返回第一程，planner会组合换乘
             return leg1
         
         logger.info(f"Demo模式: 暂无 {from_station}→{to_station} 的模拟数据")
@@ -276,12 +200,6 @@ class Client12306:
         Demo模式特殊处理：
         - "深圳" → "深圳北"（优先匹配Demo数据中存在的站）
         - "广州" → "广州南"
-        
-        Args:
-            station_name: 用户输入的站名
-            
-        Returns:
-            解析后的标准站名
         """
         if not station_name:
             return station_name
@@ -290,7 +208,7 @@ class Client12306:
         if self._get_station_code(station_name):
             return station_name
         
-        # Demo模式特殊映射（将常见简称映射到Demo数据中的站名）
+        # Demo模式特殊映射
         demo_aliases = {
             "深圳": "深圳北",
             "广州": "广州南",
@@ -326,7 +244,6 @@ class Client12306:
         # 先检查别名
         alias_name = demo_aliases.get(station_name)
         if alias_name:
-            # 检查别名对应的路线是否在demo数据中存在
             if has_demo_data(alias_name, alias_name):
                 return alias_name
         
@@ -337,7 +254,6 @@ class Client12306:
             if self._demo_mode:
                 from api.demo_data import DEMO_DATA
                 for match in matches:
-                    # 检查该站是否出现在任何demo路线中
                     for route_key in DEMO_DATA:
                         parts = route_key.split("-", 1)
                         if len(parts) == 2 and match in parts:
@@ -347,11 +263,9 @@ class Client12306:
             logger.info(f"站名模糊匹配: '{station_name}' → '{matches[0]}'")
             return matches[0]
         
-        # 无法匹配，返回原值
-        logger.warning(f"无法匹配站名: {station_name}")
         return station_name
 
-    def fuzzy_search_stations(self, keyword: str) -> list[str]:
+    def fuzzy_search_stations(self, keyword: str) -> List[str]:
         """
         模糊搜索站点名称
         
@@ -359,12 +273,11 @@ class Client12306:
             keyword: 关键词
             
         Returns:
-            所有包含关键词的站名列表（按相关性排序）
+            所有包含关键词的站名列表
         """
         if not keyword:
             return []
         
-        # 确保站点数据已加载
         if self._station_names is None:
             self._load_station_data()
         
@@ -373,7 +286,6 @@ class Client12306:
         
         for name in self._station_names:
             if keyword_lower in name.lower():
-                # 优先完全匹配的
                 if name == keyword:
                     matches.insert(0, name)
                 else:
@@ -388,32 +300,27 @@ class Client12306:
         return self._station_map.get(station_name)
 
     def _load_station_data(self):
-        """加载站点数据（名称→电报码映射 + 站名列表）"""
+        """加载站点数据"""
         self._station_map = {}
         self._station_names = []
         
-        try:
-            with httpx.Client(timeout=15) as client:
-                resp = client.get(self.STATION_URL, headers=self.HEADERS, follow_redirects=True)
-                resp.raise_for_status()
-                text = resp.text
-
-            # 解析 station_name.js 格式
-            # 格式: @bjb|北京北|VAP|beijingbei|bjb|0
-            for entry in text.split("@")[1:]:
-                parts = entry.split("|")
-                if len(parts) >= 3:
-                    name = parts[1]       # 站名
-                    code = parts[2]       # 电报码
-                    self._station_map[name] = code
-                    self._station_names.append(name)
-
-            logger.info(f"加载站点映射: {len(self._station_map)} 个站点")
-
-        except Exception as e:
-            logger.error(f"加载站点映射失败: {e}")
-            # 使用预置常用站点
-            self._fallback_station_map()
+        # 优先从本地JSON加载
+        import json
+        from pathlib import Path
+        
+        code_file = Path(__file__).resolve().parent.parent / "data" / "station_codes.json"
+        if code_file.exists():
+            try:
+                with open(code_file, 'r', encoding='utf-8') as f:
+                    self._station_map = json.load(f)
+                self._station_names = list(self._station_map.keys())
+                logger.info(f"从本地加载站点映射: {len(self._station_map)} 个站点")
+                return
+            except Exception as e:
+                logger.warning(f"加载本地站点映射失败: {e}")
+        
+        # 备用：从12306获取
+        self._fallback_station_map()
 
     def _fallback_station_map(self):
         """使用预置的常用站点"""
@@ -432,8 +339,7 @@ class Client12306:
             "长沙": "CSQ", "长沙南": "CWQ", "长沙西": "CXQ",
             "衡阳": "HYC", "衡阳东": "HVQ",
             "株洲": "ZZC", "株洲西": "ZAQ",
-            "永州": "YNQ",
-            "东安东": "DAZ",
+            "永州": "YNQ", "东安东": "DAZ",
             
             # 湖北省
             "武汉": "WHN", "武汉西": "WEF", "汉口": "HKN", "武昌": "WCN",
@@ -445,54 +351,41 @@ class Client12306:
             # 江苏省
             "南京": "NJH", "南京南": "NKH", "南京北": "NJH",
             "苏州": "SZH", "苏州北": "OBH",
-            "无锡": "WXH",
-            "常州": "CZH",
-            "镇江": "ZJH",
+            "无锡": "WXH", "常州": "CZH", "镇江": "ZJH",
             
             # 浙江省
             "杭州": "HZH", "杭州东": "HGH", "杭州南": "XHH", "杭州西": "XGH",
             "宁波": "NGH", "宁波东": "GLH",
-            "温州": "RZH", "温州南": "VRH",
-            "义乌": "YWG",
+            "温州": "RZH", "温州南": "VRH", "义乌": "YWG",
             
             # 四川省
             "成都": "CDW", "成都东": "ICW", "成都南": "CNW", "成都西": "CXW",
-            "绵阳": "MYW",
-            "乐山": "USW",
-            "宜宾": "YBW",
-            
-            # 重庆市辖区
-            "万州": "WYW",
+            "绵阳": "MYW", "乐山": "USW", "宜宾": "YBW",
             
             # 贵州省
             "贵阳": "GIW", "贵阳北": "KQW", "贵阳东": "KEW",
             
             # 云南省
             "昆明": "KMM", "昆明南": "KOM", "昆明西": "KXM",
-            "大理": "DKM",
-            "丽江": "LJM",
+            "大理": "DKM", "丽江": "LJM",
             
             # 陕西省
-            "西安": "XAY", "西安北": "EAO", "西安南": "CAY",
-            "西安西": "EAS",
+            "西安": "XAY", "西安北": "EAO", "西安南": "CAY", "西安西": "EAS",
             "宝鸡": "BJY",
             
             # 甘肃省
             "兰州": "LZJ", "兰州西": "LAJ", "兰州东": "LDJ",
-            "敦煌": "DHJ",
-            "嘉峪关": "JXJ",
+            "敦煌": "DHJ", "嘉峪关": "JXJ",
             
             # 青海省
-            "西宁": "XNO",
-            "格尔木": "GRO",
+            "西宁": "XNO", "格尔木": "GRO",
             
             # 西藏
             "拉萨": "LSO",
             
             # 新疆
             "乌鲁木齐": "WMR", "乌鲁木齐南": "WAR",
-            "吐鲁番": "TFR",
-            "哈密": "HMR",
+            "吐鲁番": "TFR", "哈密": "HMR",
             
             # 东北三省
             "哈尔滨": "HRB", "哈尔滨西": "VBB", "哈尔滨东": "VAB",
@@ -502,71 +395,42 @@ class Client12306:
             
             # 广西
             "南宁": "NNZ", "南宁东": "NFZ",
-            "桂林": "GLZ", "桂林北": "GBZ",
-            "柳州": "LZZ",
-            "北海": "BHZ",
+            "桂林": "GLZ", "桂林北": "GBZ", "柳州": "LZZ", "北海": "BHZ",
             
             # 福建省
             "福州": "FZS", "福州南": "FYS", "福州北": "FBZ",
-            "厦门": "XMS", "厦门北": "XKS",
-            "泉州": "QYS",
+            "厦门": "XMS", "厦门北": "XKS", "泉州": "QYS",
             
             # 江西省
             "南昌": "NCG", "南昌西": "NXG",
-            "赣州": "GZG",
-            "九江": "JJG",
+            "赣州": "GZG", "九江": "JJG",
             
             # 安徽省
             "合肥": "HFH", "合肥南": "ENH", "合肥西": "HTH",
-            "黄山": "HKD",
-            "芜湖": "WHH",
+            "黄山": "HKD", "芜湖": "WHH",
             
             # 山东省
             "济南": "JNK", "济南西": "JGK",
             "青岛": "QDK", "青岛北": "QHK",
-            "烟台": "YAK",
-            "威海": "WKK",
+            "烟台": "YAK", "威海": "WKK",
             
             # 山西省
-            "太原": "TYV", "太原南": "TNV",
-            "大同": "DTV",
+            "太原": "TYV", "太原南": "TNV", "大同": "DTV",
             
             # 河北省
             "石家庄": "SJP", "石家庄东": "SXP",
-            "保定": "BDP",
-            "唐山": "TSP",
+            "保定": "BDP", "唐山": "TSP",
             
             # 内蒙古
-            "呼和浩特": "HHC",
-            "包头": "BTC",
+            "呼和浩特": "HHC", "包头": "BTC",
             
             # 海南省
-            "海口": "HMQ", "海口东": "KEQ",
-            "三亚": "SEQ",
+            "海口": "HMQ", "海口东": "KEQ", "三亚": "SEQ",
             
             # 宁夏
             "银川": "YIJ",
             
-            # 香港（高铁）
+            # 香港
             "香港西九龙": "XJA",
         }
         self._station_names = list(self._station_map.keys())
-
-    def _parse_train_info(self, raw_str: str) -> dict:
-        """
-        解析12306返回的车次信息字符串
-        格式: 预订|车次|出发站|到达站|出发时间|到达时间|历时|...
-        """
-        try:
-            fields = raw_str.split("|")
-            return {
-                "train_no": fields[3] if len(fields) > 3 else "",
-                "from_station_code": fields[6] if len(fields) > 6 else "",
-                "to_station_code": fields[7] if len(fields) > 7 else "",
-                "depart_time": fields[8] if len(fields) > 8 else "",
-                "arrive_time": fields[9] if len(fields) > 9 else "",
-                "duration": fields[10] if len(fields) > 10 else "",
-            }
-        except Exception as e:
-            logger.warning(f"解析车次信息失败: {e}")
-            return {}

@@ -140,7 +140,7 @@ if submitted:
                 st.success(f"找到 {len(sorted_routes)} 个方案！")
                 
                 # 数据来源标记
-                data_source = "🟢 实时数据" if client.using_mcp else "📊 演示数据"
+                data_source = "🟢 12306实时" if client.use_realtime else "📊 演示数据"
                 st.caption(f"数据来源：{data_source}")
 
                 # 方案对比表 - 卡片化展示
