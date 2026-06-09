@@ -79,6 +79,9 @@ class TrainRoute:
     # 评分
     score: float = 0.0
 
+    # 数据来源标记
+    is_realtime: bool = False
+
     @property
     def price_low(self) -> float:
         """最低票价"""
@@ -263,6 +266,7 @@ class RoutePlanner:
             price_edz=raw.get("price_edz"),
             price_ydz=raw.get("price_ydz"),
             price_swb=raw.get("price_swb"),
+            is_realtime=raw.get("is_realtime", False),
         )
 
     def _time_to_minutes(self, time_str: str) -> int:
@@ -326,6 +330,7 @@ class RoutePlanner:
             price_edz=total_price_edz if total_price_edz else None,
             price_ydz=total_price_ydz if total_price_ydz else None,
             price_swb=total_price_swb if total_price_swb else None,
+            is_realtime=leg1.is_realtime or leg2.is_realtime,
         )
 
     def _calculate_total_duration(
