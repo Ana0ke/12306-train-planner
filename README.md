@@ -1,12 +1,20 @@
 # 12306省心小助手 🚂
 
-> 一站式火车出行规划 + 旅游攻略助手
+> 一站式火车出行规划 + AI智能旅行攻略助手
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-red.svg)](https://streamlit.io)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## ✨ 功能特色
+
+### 🤖 AI旅行规划（全新！）
+输入"我想去拉萨玩5天"，自动生成完整旅行方案：
+- 🚂 **火车路线**：结合真实时刻表，查询最优方案
+- 📅 **每日行程**：时间轴展示，包含景点、美食、住宿
+- 💰 **费用预估**：饼图分析，吃住行一目了然
+- 🎒 **装备清单**：根据目的地智能推荐
+- 💬 **对话调整**：随时修改，"第二天太满了"直接重排
 
 ### 🔍 智能路线规划
 - 输入出发地+目的地，一键获取多方案对比
@@ -29,11 +37,6 @@
 - 换乘步骤详解（哪站换、等多久、怎么走）
 - 方案适合人群标注（学生/家庭/商务）
 
-### 📊 可视化界面
-- 路线地图（交互式中国铁路网）
-- 方案对比图表（价格/时间/换乘）
-- 行程时间轴
-
 ## 🚀 快速开始
 
 ### 安装依赖
@@ -43,6 +46,27 @@ git clone https://github.com/Ana0ke/12306-train-planner.git
 cd 12306-train-planner
 pip install -r requirements.txt
 ```
+
+### 配置AI功能（可选）
+
+AI旅行规划需要配置LLM API：
+
+1. 复制配置文件：
+```bash
+cp .env.example .env
+```
+
+2. 编辑 `.env`，填入API密钥：
+```bash
+LLM_API_KEY=你的API密钥
+LLM_BASE_URL=https://api.deepseek.com
+LLM_MODEL=deepseek-chat
+```
+
+3. 支持的LLM服务：
+   - 🌊 **DeepSeek**（推荐）：https://platform.deepseek.com
+   - 🤖 **OpenAI**：https://api.openai.com
+   - 📊 **智谱AI**：https://open.bigmodel.cn
 
 ### 启动应用
 
@@ -65,20 +89,23 @@ docker run -p 8501:8501 train-planner
 12306省心小助手/
 ├── app/                      # Streamlit 前端
 │   ├── main.py               # 入口页面
-│   ├── pages/                # 多页面
-│   │   ├── 1_🔍_路线规划.py
-│   │   ├── 2_🏔️_热门线路.py
-│   │   └── 3_🎫_订票助手.py
-│   └── components/           # 可复用UI组件
+│   └── pages/                # 多页面
+│       ├── 1_🔍_路线规划.py
+│       ├── 2_🏔️_热门线路.py
+│       ├── 3_🎫_订票助手.py
+│       └── 4_🤖_AI旅行规划.py  # 新增！
 │
 ├── core/                     # 核心业务逻辑
 │   ├── planner.py            # 路线规划引擎
+│   ├── ai_planner.py        # AI规划引擎（新增！）
+│   ├── itinerary.py         # 行程数据模型（新增！）
 │   ├── filter.py             # 多维筛选器
 │   ├── transfer.py           # 换乘计算
 │   └── scorer.py             # 方案评分系统
 │
 ├── api/                      # 数据获取层
 │   ├── client_12306.py       # 12306查询接口
+│   ├── llm_client.py         # LLM客户端（新增！）
 │   └── cache.py              # 查询缓存
 │
 ├── data/                     # 数据文件
@@ -90,7 +117,28 @@ docker run -p 8501:8501 train-planner
 ├── docs/                     # 项目文档
 ├── Dockerfile
 ├── requirements.txt
+├── .env.example
 └── README.md
+```
+
+## 🤖 AI规划使用示例
+
+### 示例1：简单需求
+```
+输入：拉萨，5天
+输出：完整5日行程 + Z264火车方案 + 布达拉宫/大昭寺等景点安排 + ¥2500预算
+```
+
+### 示例2：带偏好
+```
+输入：成都，4天，美食优先
+输出：4日行程 + 火锅/串串/小吃推荐 + 武侯祠/熊猫基地安排
+```
+
+### 示例3：调整行程
+```
+反馈：第二天太满了
+输出：优化后的第二天行程，时间更宽松
 ```
 
 ## 🎯 目标用户
@@ -98,6 +146,7 @@ docker run -p 8501:8501 train-planner
 | 人群 | 核心需求 |
 |------|----------|
 | 🏔️ 火车旅行爱好者 | 路线风景、沿途体验、慢旅行攻略 |
+| 🤖 效率派 | AI一键生成完整方案 |
 | 🎫 怕麻烦的出行者 | 一键方案、不用自己查、省心省力 |
 
 ## 🛠️ 技术栈
@@ -105,23 +154,25 @@ docker run -p 8501:8501 train-planner
 | 用途 | 技术 |
 |------|------|
 | 前端 | Streamlit |
-| 后端 | FastAPI |
-| 地图 | folium |
-| 图表 | plotly |
-| 数据处理 | pandas |
+| AI | DeepSeek / OpenAI API |
+| 图表 | Plotly |
+| 地图 | Folium |
 | 缓存 | SQLite |
+| 日志 | Loguru |
 | 部署 | Docker |
 
 ## 📝 开发计划
 
 - [x] 项目骨架搭建
-- [ ] 12306查询接口封装
-- [ ] 路线规划引擎（直达+换乘）
-- [ ] 多维筛选器
-- [ ] 热门线路数据（8条）
-- [ ] 城市攻略卡片
-- [ ] 路线地图可视化
-- [ ] Docker部署
+- [x] 12306查询接口封装
+- [x] 路线规划引擎（直达+换乘）
+- [x] 多维筛选器
+- [x] 热门线路数据（8条）
+- [x] 城市攻略卡片
+- [x] 路线地图可视化
+- [x] AI旅行规划引擎 ✨
+- [ ] 用户反馈优化
+- [ ] 更多热门线路
 
 ## 📜 License
 
