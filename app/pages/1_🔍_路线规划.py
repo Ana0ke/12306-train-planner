@@ -183,7 +183,7 @@ if submitted:
                                         {route.duration}
                                     </div>
                                     <div style="font-size:0.85rem; color:#666;">
-                                        ¥{route.price_low}~{route.price_high}
+                                        {'¥' + str(route.price_low) + '~' + str(route.price_high) if route.price_low > 0 else '票价以12306为准'}
                                     </div>
                                 </div>
                             </div>
@@ -196,9 +196,10 @@ if submitted:
                     score_emoji = "🟢" if route.score >= 80 else "🟡" if route.score >= 60 else "🔴"
                     rank_class = "rank-1" if i == 0 else "rank-2" if i == 1 else "rank-3" if i == 2 else ""
                     
+                    price_str = f"¥{route.price_low}~{route.price_high}" if route.price_low > 0 else "票价以12306为准"
                     with st.expander(
                         f"{score_emoji} 方案{i+1} | {route.train_no} | "
-                        f"{route.duration} | ¥{route.price_low}~{route.price_high} | "
+                        f"{route.duration} | {price_str} | "
                         f"评分 {route.score:.0f}",
                         expanded=(i == 0),
                     ):
@@ -231,6 +232,8 @@ if submitted:
                             
                             if price_items:
                                 st.markdown(" ".join(price_items), unsafe_allow_html=True)
+                            else:
+                                st.markdown('<span style="color:#888; font-size:0.85rem;">实时数据不含票价，请以12306为准</span>', unsafe_allow_html=True)
 
                         st.info("⚠️ 以上信息仅供参考，实际票价和时刻请以12306为准")
             else:

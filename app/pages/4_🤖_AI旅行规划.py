@@ -307,7 +307,7 @@ if submitted:
                             "duration": best_route.duration,
                             "train_type": best_route.train_type,
                             "transfers": best_route.transfers,
-                            "price_range": f"¥{best_route.price_low}~¥{best_route.price_high}",
+                            "price_range": f"¥{best_route.price_low}~¥{best_route.price_high}" if best_route.price_low > 0 else "票价以12306为准",
                             "price_low": best_route.price_low,
                             "tips": f"{best_route.train_type}，{'直达' if best_route.transfers == 0 else f'换乘{best_route.transfers}次'}" + \
                                     f"，建议提前购票",
