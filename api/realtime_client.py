@@ -203,8 +203,13 @@ class RealtimeClient:
         for pattern in patterns:
             matches = re.findall(pattern, init_html, re.IGNORECASE)
             for m in matches:
-                if m.startswith('/'):
+                if m.startswith('http'):
+                    pass  # 已经是完整URL
+                elif m.startswith('/'):
                     m = 'https://kyfw.12306.cn' + m
+                else:
+                    # 相对路径如 leftTicket/queryG → 补全为完整URL
+                    m = f'https://kyfw.12306.cn/otn/{m}'
                 if m not in urls:
                     urls.append(m)
         
@@ -250,12 +255,6 @@ class RealtimeClient:
         
         self._rate_limit()
         
-        # 获取会话Cookie
-        cookies = self._get_session_cookies()
-        if not cookies:
-            logger.warning("无法获取12306会话Cookie")
-            return None
-        
         # 查询参数
         params = {
             "leftTicketDTO.train_date": date,
@@ -264,75 +263,87 @@ class RealtimeClient:
             "purpose_codes": "ADULT"
         }
         
-        # 尝试多个query URL
-        query_urls = [
-            "https://kyfw.12306.cn/otn/leftTicket/queryG",
-            "https://kyfw.12306.cn/otn/leftTicket/queryZ",
-            "https://kyfw.12306.cn/otn/leftTicket/query",
-        ]
-        
-        for query_url in query_urls:
-            try:
-                with httpx.Client(timeout=8, verify=False) as client:
-                    # 设置cookie
-                    client.cookies.update(cookies)
-                    
-                    resp = client.get(
-                        query_url,
-                        headers=HEADERS,
-                        params=params,
-                        timeout=8
-                    )
-                    
-                    if resp.status_code == 200:
-                        try:
-                            data = resp.json()
-                            
-                            # 检查响应状态
-                            if data.get("httpstatus") == 200 and "data" in data:
-                                tickets = self._parse_tickets(data["data"], date)
-                                if tickets:
-                                    logger.info(
-                                        f"12306查询成功: {from_station}({from_code})→"
-                                        f"{to_station}({to_code}) {date}, {len(tickets)}条数据"
-                                    )
-                                    return tickets
-                            
-                            # 检查是否需要用c_url
-                            if data.get("status") == False:
-                                c_url = data.get("c_url", "")
-                                if c_url:
-                                    real_url = f"https://kyfw.12306.cn/otn/leftTicket/{c_url}"
-                                    resp2 = client.get(
-                                        real_url,
-                                        headers=HEADERS,
-                                        params=params,
-                                        timeout=8
-                                    )
-                                    if resp2.status_code == 200:
-                                        data2 = resp2.json()
-                                        if data2.get("httpstatus") == 200 and "data" in data2:
-                                            tickets = self._parse_tickets(data2["data"], date)
-                                            if tickets:
-                                                logger.info(
-                                                    f"12306查询成功(c_url): {from_station}→{to_station}, "
-                                                    f"{len(tickets)}条数据"
-                                                )
-                                                return tickets
-                            
-                        except json.JSONDecodeError:
-                            continue
-                    elif resp.status_code == 302:
-                        # 被重定向，可能被反爬
-                        logger.warning("12306查询被重定向，可能触发反爬")
-                        continue
+        # 使用同一个Client完成init+query，确保Cookie传递
+        try:
+            with httpx.Client(timeout=15, verify=False, follow_redirects=True) as client:
+                # Step 1: 访问init页面获取Cookie和query URL
+                init_resp = client.get(INIT_URL, headers=HEADERS, timeout=15)
+                if init_resp.status_code != 200:
+                    logger.warning(f"12306 init页面请求失败: {init_resp.status_code}")
+                    return None
+                
+                # 从init页面提取query URL
+                extracted_urls = self._extract_query_urls(init_resp.text)
+                
+                # 查询URL优先级：提取到的 > 默认的
+                query_urls = extracted_urls if extracted_urls else [
+                    "https://kyfw.12306.cn/otn/leftTicket/queryG",
+                    "https://kyfw.12306.cn/otn/leftTicket/queryZ",
+                    "https://kyfw.12306.cn/otn/leftTicket/query",
+                ]
+                
+                # Step 2: 用同一个client查询（Cookie自动携带）
+                for query_url in query_urls:
+                    try:
+                        resp = client.get(
+                            query_url,
+                            headers=HEADERS,
+                            params=params,
+                            timeout=15
+                        )
                         
-            except (httpx.TimeoutException, httpx.NetworkError) as e:
-                logger.warning(f"12306查询网络错误({query_url}): {e}")
-                continue
-            except Exception as e:
-                logger.warning(f"12306查询异常({query_url}): {e}")
-                continue
+                        if resp.status_code == 200:
+                            try:
+                                data = resp.json()
+                                
+                                # 检查响应状态
+                                if data.get("httpstatus") == 200 and "data" in data:
+                                    tickets = self._parse_tickets(data["data"], date)
+                                    if tickets:
+                                        logger.info(
+                                            f"12306查询成功: {from_station}({from_code})→"
+                                            f"{to_station}({to_code}) {date}, {len(tickets)}条数据"
+                                        )
+                                        return tickets
+                                
+                                # 检查是否需要用c_url
+                                if data.get("status") == False:
+                                    c_url = data.get("c_url", "")
+                                    if c_url:
+                                        real_url = f"https://kyfw.12306.cn/otn/leftTicket/{c_url}"
+                                        resp2 = client.get(
+                                            real_url,
+                                            headers=HEADERS,
+                                            params=params,
+                                            timeout=15
+                                        )
+                                        if resp2.status_code == 200:
+                                            data2 = resp2.json()
+                                            if data2.get("httpstatus") == 200 and "data" in data2:
+                                                tickets = self._parse_tickets(data2["data"], date)
+                                                if tickets:
+                                                    logger.info(
+                                                        f"12306查询成功(c_url): {from_station}→{to_station}, "
+                                                        f"{len(tickets)}条数据"
+                                                    )
+                                                    return tickets
+                                
+                            except json.JSONDecodeError:
+                                continue
+                        elif resp.status_code == 302:
+                            logger.warning("12306查询被重定向，可能触发反爬")
+                            continue
+                            
+                    except (httpx.TimeoutException, httpx.NetworkError) as e:
+                        logger.warning(f"12306查询网络错误({query_url}): {e}")
+                        continue
+                    except Exception as e:
+                        logger.warning(f"12306查询异常({query_url}): {e}")
+                        continue
+        
+        except Exception as e:
+            logger.warning(f"12306查询会话初始化失败: {e}")
+            return None
         
         logger.warning(f"12306查询未返回有效数据: {from_station}→{to_station}")
         return None
@@ -353,16 +364,19 @@ class RealtimeClient:
         try:
             # raw_data可能是dict或list
             if isinstance(raw_data, dict):
+                # 获取站名映射
+                station_map = raw_data.get("map", {})
                 # 尝试获取result字段
                 raw_list = raw_data.get("result") or raw_data.get("datas") or []
             elif isinstance(raw_data, list):
                 raw_list = raw_data
+                station_map = {}
             else:
                 return results
             
             for item in raw_list:
                 try:
-                    ticket = self._parse_single_ticket(item, date)
+                    ticket = self._parse_single_ticket(item, date, station_map)
                     if ticket:
                         results.append(ticket)
                 except Exception as e:
@@ -374,42 +388,78 @@ class RealtimeClient:
         
         return results
 
-    def _parse_single_ticket(self, item, date: str) -> Optional[dict]:
+    def _parse_single_ticket(self, item, date: str, station_map: Optional[dict] = None) -> Optional[dict]:
         """
         解析单条车票数据
         
         12306返回的数据结构：
-        - item可能是字符串（@分隔）或字典
+        - item是字符串，用|分隔
+        - 字段索引：
+          [0] secretStr, [1] buttonTextInfo, [2] train_no, [3] station_train_code(车次),
+          [4] start_station_telecode, [5] end_station_telecode,
+          [6] from_station_telecode, [7] to_station_telecode,
+          [8] start_time, [9] arrive_time, [10] lishi(历时),
+          [11] canWebBuy, ...
+          [21] swz_num(商务座), [23] zy_num(一等座), [24] ze_num(二等座),
+          [26] rw_num(软卧), [28] yw_num(硬卧), [29] rz_num(软座),
+          [30] yz_num(硬座), ...
         """
         try:
-            # 处理字符串格式
             if isinstance(item, str):
-                fields = item.split("@")
-                if len(fields) < 20:
+                # 优先用|分隔（12306标准格式）
+                if "|" in item:
+                    fields = item.split("|")
+                elif "@" in item:
+                    fields = item.split("@")
+                else:
                     return None
                     
-                # 字符串格式解析
-                # secretStr|buttonTextInfo|train_no|code|from_code|to_code|
-                # from_name|to_name|start_time|arrive_time|duration|...
+                if len(fields) < 12:
+                    return None
+                    
+                # 站名映射
+                _map = station_map or {}
+                
+                # 安全获取字段
+                def _get(idx, default=""):
+                    return fields[idx] if idx < len(fields) and fields[idx] else default
+                
+                from_code = _get(6)
+                to_code = _get(7)
+                from_name = _map.get(from_code, self.get_station_name(from_code) or from_code)
+                to_name = _map.get(to_code, self.get_station_name(to_code) or to_code)
+                
                 dto = {
-                    "secretStr": fields[0],
-                    "buttonTextInfo": fields[1] if len(fields) > 1 else "",
-                    "train_no": fields[2] if len(fields) > 2 else "",
-                    "station_train_code": fields[3] if len(fields) > 3 else "",
-                    "start_station_telecode": fields[4] if len(fields) > 4 else "",
-                    "end_station_telecode": fields[5] if len(fields) > 5 else "",
-                    "from_station_telecode": fields[6] if len(fields) > 6 else "",
-                    "to_station_telecode": fields[7] if len(fields) > 7 else "",
-                    "start_time": fields[8] if len(fields) > 8 else "",
-                    "arrive_time": fields[9] if len(fields) > 9 else "",
-                    "lishi": fields[10] if len(fields) > 10 else "",
-                    "canWebBuy": fields[11] if len(fields) > 11 else "",
-                    "from_station_name": self.get_station_name(fields[6]) if len(fields) > 6 else "",
-                    "to_station_name": self.get_station_name(fields[7]) if len(fields) > 7 else "",
+                    "secretStr": _get(0),
+                    "buttonTextInfo": _get(1),
+                    "train_no": _get(2),
+                    "station_train_code": _get(3),
+                    "start_station_telecode": _get(4),
+                    "end_station_telecode": _get(5),
+                    "from_station_telecode": from_code,
+                    "to_station_telecode": to_code,
+                    "start_time": _get(8),
+                    "arrive_time": _get(9),
+                    "lishi": _get(10),
+                    "canWebBuy": _get(11),
+                    "from_station_name": from_name,
+                    "to_station_name": to_name,
+                    # 余票信息（字段索引来自12306官方API + mcp-server-12306验证）
+                    "swz_num": _get(32, "无"),   # 商务座
+                    "zy_num": _get(31, "无"),    # 一等座
+                    "ze_num": _get(30, "无"),    # 二等座
+                    "gr_num": _get(21, "无"),    # 高级软卧
+                    "rw_num": _get(23, "无"),    # 软卧
+                    "dw_num": _get(33, "无"),    # 动卧
+                    "yw_num": _get(28, "无"),    # 硬卧
+                    "rz_num": _get(24, "无"),    # 软座
+                    "yz_num": _get(29, "无"),    # 硬座
+                    "wz_num": _get(26, "无"),    # 无座
+                    # 票价字段位置不确定，从[35]开始可能包含
+                    "yp_info": _get(39),
                 }
                 
             elif isinstance(item, dict):
-                # 字典格式（queryLeftNewDTO）
                 dto = item.get("queryLeftNewDTO", item)
             else:
                 return None
