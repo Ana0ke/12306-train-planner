@@ -58,11 +58,11 @@ def get_station_suggestions(keyword: str) -> list[str]:
 # 初始化客户端用于状态显示
 client = Client12306()
 
-# 调试：显示查询模式
+# 调试：显示查询模式（临时，部署成功后删除）
 import os
 _debug_mode = os.getenv("DEMO_MODE", "未设置")
 _debug_realtime = os.getenv("USE_REALTIME", "未设置")
-st.caption(f"🔧 环境变量: DEMO_MODE={_debug_mode}, USE_REALTIME={_debug_realtime} | 客户端: realtime={client.use_realtime}, demo={client.demo_mode}")
+st.info(f"🔧 调试: DEMO_MODE={_debug_mode}, USE_REALTIME={_debug_realtime} | realtime={client.use_realtime}, demo={client.demo_mode}")
 
 with st.form("route_query"):
     col1, col2, col3 = st.columns(3)
