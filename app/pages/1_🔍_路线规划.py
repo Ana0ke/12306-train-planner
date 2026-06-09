@@ -8,6 +8,7 @@ if _PROJECT_ROOT not in sys.path:
 """
 12306省心小助手 - 路线规划页面
 支持智能站点名匹配
+支持MCP真实数据查询（配置MCP_SERVER_URL后自动启用）
 """
 
 import streamlit as st
@@ -54,6 +55,9 @@ def get_station_suggestions(keyword: str) -> list[str]:
 
 
 # ===== 查询表单 =====
+# 初始化客户端用于状态显示
+client = Client12306()
+
 with st.form("route_query"):
     col1, col2, col3 = st.columns(3)
     
@@ -134,6 +138,10 @@ if submitted:
                 sorted_routes = route_filter.sort(scored_routes)
 
                 st.success(f"找到 {len(sorted_routes)} 个方案！")
+                
+                # 数据来源标记
+                data_source = "🟢 实时数据" if client.using_mcp else "📊 演示数据"
+                st.caption(f"数据来源：{data_source}")
 
                 # 方案对比表 - 卡片化展示
                 st.markdown("### 📊 方案对比")

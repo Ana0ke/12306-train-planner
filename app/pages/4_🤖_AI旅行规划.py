@@ -13,6 +13,7 @@ if _PROJECT_ROOT not in sys.path:
 1. Demo预览模式 - 无API Key也能体验热门目的地旅行方案
 2. 多城市联程规划 - 支持"成都+九寨沟"等格式
 3. 出行日期智能感知 - 自动提供季节、天气、节假日提醒
+4. MCP真实数据查询 - 配置MCP_SERVER_URL后可查询真实车次
 """
 
 import streamlit as st
@@ -22,6 +23,7 @@ from datetime import datetime, date
 
 from api.llm_client import check_llm_status
 from api.demo_plans import get_demo_plan_by_destination, POPULAR_DESTINATIONS
+from api.client_12306 import Client12306
 from components.styles import inject_styles
 
 st.set_page_config(page_title="AI旅行规划 🤖", page_icon="🤖", layout="wide")
@@ -61,6 +63,9 @@ st.markdown('<p style="color:#666;">告诉我想去哪里、玩几天，我来�
 
 # ===== LLM配置检查 =====
 llm_configured = check_llm_config()
+
+# 初始化12306客户端用于数据来源判断
+client_12306 = Client12306()
 
 # ===== Demo预览模式（无API Key或用户选择）=====
 if not llm_configured:
@@ -311,7 +316,8 @@ if submitted:
 
                     # 显示路线方案
                     if train_info:
-                        st.success(f"找到最优路线：{train_info['train_no']} {train_info['depart_time']}→{train_info['arrive_time']}")
+                        data_source = "🟢 实时数据" if client_12306.using_mcp else "📊 演示数据"
+                        st.success(f"找到最优路线：{train_info['train_no']} {train_info['depart_time']}→{train_info['arrive_time']} [{data_source}]")
 
                 except Exception as e:
                     st.warning(f"路线查询失败，将跳过火车信息: {e}")

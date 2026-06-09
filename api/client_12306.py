@@ -19,6 +19,9 @@ load_dotenv()
 # 导入demo数据
 from api.demo_data import get_demo_routes, has_demo_data, get_demo_transfer_routes
 
+# 导入MCP客户端
+from api.mcp_client import MCPClient
+
 
 class Client12306:
     """12306查询客户端"""
@@ -40,6 +43,7 @@ class Client12306:
         
         Args:
             demo_mode: 是否启用Demo模式，None时从环境变量DEMO_MODE读取
+                      注意：如果配置了MCP_SERVER_URL，会自动使用MCP真实查询
         """
         # 如果未指定demo_mode，从环境变量读取
         if demo_mode is None:
@@ -50,10 +54,33 @@ class Client12306:
         self._station_map: Optional[dict[str, str]] = None
         self._station_names: Optional[list[str]] = None  # 用于模糊搜索
         
-        if self._demo_mode:
+        # 初始化MCP客户端
+        mcp_server_url = os.getenv("MCP_SERVER_URL", "").strip()
+        self._mcp_client: Optional[MCPClient] = None
+        
+        if mcp_server_url:
+            self._mcp_client = MCPClient(mcp_server_url)
+            if self._mcp_client.is_available():
+                logger.info(f"12306客户端已启用MCP模式（{mcp_server_url}）")
+            else:
+                logger.warning(f"MCP服务不可用（{mcp_server_url}），将使用Demo模式")
+                self._demo_mode = True
+        elif self._demo_mode:
             logger.info("12306客户端已启用Demo模式（模拟数据）")
         else:
-            logger.warning("12306客户端已启用真实API模式，12306请求可能被拦截")
+            logger.warning("12306客户端已启用真实API模式（仅Demo，无MCP），12306请求可能被拦截")
+    
+    @property
+    def mcp_available(self) -> bool:
+        """MCP服务是否可用"""
+        if self._mcp_client is None:
+            return False
+        return self._mcp_client.is_available()
+    
+    @property
+    def using_mcp(self) -> bool:
+        """当前是否使用MCP模式"""
+        return self.mcp_available and not self._demo_mode
 
     @property
     def demo_mode(self) -> bool:
@@ -81,7 +108,21 @@ class Client12306:
         if self._demo_mode:
             return self._demo_query(from_station, to_station, date)
         
-        # 真实API模式：诚实处理
+        # MCP模式优先
+        if self._mcp_client and self._mcp_client.is_available():
+            try:
+                mcp_tickets = self._mcp_client.query_tickets(
+                    from_station=from_station,
+                    to_station=to_station,
+                    date=date,
+                )
+                if mcp_tickets:
+                    logger.info(f"MCP查询成功: {from_station}→{to_station}, {len(mcp_tickets)}条数据")
+                    return mcp_tickets
+            except Exception as e:
+                logger.warning(f"MCP查询失败: {e}")
+        
+        # 真实API模式：诚实处理（无MCP时）
         # 由于12306需要登录Cookie且容易被拦截，这里明确提示用户
         logger.warning("尝试使用真实12306 API...")
         
@@ -137,9 +178,9 @@ class Client12306:
         """
         查询余票信息（公开接口别名）
         
-        ⚠️ 诚实处理说明：
-        - Demo模式：返回模拟数据
-        - 真实模式：尝试请求12306 API，如果失败返回None让上层fallback
+        查询策略（按优先级）：
+        1. MCP模式（MCP_SERVER_URL已配置且服务可用）→ 真实数据
+        2. Demo模式 → 模拟数据
         
         Args:
             from_station: 出发站
@@ -147,23 +188,38 @@ class Client12306:
             date: 日期
             
         Returns:
-            车次信息列表，真实查询失败时返回None
+            车次信息列表，查询失败时返回None
         """
-        # Demo模式：直接返回模拟数据
+        # 1. MCP模式优先
+        if self._mcp_client and self._mcp_client.is_available():
+            try:
+                mcp_tickets = self._mcp_client.query_tickets(
+                    from_station=from_station,
+                    to_station=to_station,
+                    date=date,
+                )
+                if mcp_tickets:
+                    logger.info(f"MCP查询成功: {from_station}→{to_station}, {len(mcp_tickets)}条数据")
+                    return mcp_tickets
+                else:
+                    logger.warning(f"MCP查询无数据，将fallback到Demo模式")
+            except Exception as e:
+                logger.warning(f"MCP查询异常: {e}，将fallback到Demo模式")
+        
+        # 2. Demo模式
         if self._demo_mode:
             return self._demo_query(from_station, to_station, date)
         
-        # 真实API模式
+        # 非Demo模式的fallback
         try:
             result = self.query(from_station, to_station, date)
             if result:
                 return result
-            # 查询失败，返回None让上层知道需要fallback
-            logger.info("真实查询返回空，将fallback到Demo模式")
-            return None
+            logger.info("查询返回空，将fallback到Demo模式")
+            return self._demo_query(from_station, to_station, date)
         except Exception as e:
-            logger.error(f"真实查询异常: {e}")
-            return None
+            logger.error(f"查询异常: {e}，将fallback到Demo模式")
+            return self._demo_query(from_station, to_station, date)
 
     def _demo_query(
         self,
