@@ -9,11 +9,17 @@ from pathlib import Path
 
 def inject_styles():
     """注入全局CSS美化 + PWA meta标签"""
-    # CSS注入
-    css_path = Path(__file__).parent / "static" / "style.css"
+    # CSS注入 — 注意路径：本文件在 app/components/，CSS在 app/static/
+    css_path = Path(__file__).resolve().parent.parent / "static" / "style.css"
     if css_path.exists():
         css = css_path.read_text(encoding="utf-8")
         st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+    # 手机端CSS注入
+    mobile_css_path = Path(__file__).resolve().parent.parent / "static" / "mobile.css"
+    if mobile_css_path.exists():
+        mobile_css = mobile_css_path.read_text(encoding="utf-8")
+        st.markdown(f"<style>{mobile_css}</style>", unsafe_allow_html=True)
 
     # PWA meta标签
     st.markdown("""

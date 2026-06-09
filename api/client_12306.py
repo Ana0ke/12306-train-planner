@@ -202,16 +202,8 @@ class Client12306:
         # 先检查别名
         alias_name = demo_aliases.get(station_name)
         if alias_name:
-            routes = get_demo_routes(alias_name, alias_name)  # 只需要检查是否存在
-            # 如果别名在demo数据中，直接返回
-            for key in get_demo_routes.__self__ if hasattr(get_demo_routes, '__self__') else []:
-                pass
-            # 简化处理：直接检查demo数据
+            # 检查别名对应的路线是否在demo数据中存在
             if has_demo_data(alias_name, alias_name):
-                return alias_name
-            # 再次尝试在demo数据中查找
-            routes = get_demo_routes(alias_name, "")
-            if routes:
                 return alias_name
         
         # 模糊匹配
@@ -220,9 +212,13 @@ class Client12306:
             # Demo模式优先选择Demo数据中存在的站
             if self._demo_mode:
                 for match in matches:
-                    if has_demo_data(match, match) or any(match in key for key in get_demo_routes.__self__ if hasattr(get_demo_routes, '__self__')):
-                        logger.info(f"Demo模式站名模糊匹配: '{station_name}' → '{match}'")
-                        return match
+                    # 检查该站是否出现在任何demo路线中
+                    from api.demo_data import DEMO_DATA
+                    for route_key in DEMO_DATA:
+                        parts = route_key.split("-", 1)
+                        if len(parts) == 2 and match in parts:
+                            logger.info(f"Demo模式站名模糊匹配: '{station_name}' → '{match}'")
+                            return match
             
             logger.info(f"站名模糊匹配: '{station_name}' → '{matches[0]}'")
             return matches[0]

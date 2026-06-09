@@ -120,19 +120,12 @@ if submitted:
 
         with st.spinner(f"正在查询 {from_station} → {to_station} 的路线..."):
             planner = RoutePlanner()
-            routes = planner.search(
+            # 直接用search_with_transfer，它内部会先查直达再查换乘，避免重复查询
+            routes = planner.search_with_transfer(
                 from_station=from_station,
                 to_station=to_station,
                 travel_date=str(travel_date),
             )
-
-            if not routes:
-                st.warning(f"未找到 {from_station} → {to_station} 的直达路线，正在查找换乘方案...")
-                routes = planner.search_with_transfer(
-                    from_station=from_station,
-                    to_station=to_station,
-                    travel_date=str(travel_date),
-                )
 
             if routes:
                 # 筛选和评分
