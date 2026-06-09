@@ -79,6 +79,8 @@ class TripPlan:
     budget_breakdown: BudgetBreakdown = field(default_factory=BudgetBreakdown)  # 费用预估
     packing_list: list[str] = field(default_factory=list)  # 装备清单
     tips: list[str] = field(default_factory=list)  # 出行Tips
+    travel_date: Optional[str] = None  # 出行日期，格式YYYY-MM-DD
+    season_info: Optional[dict] = None  # 季节信息，包含season、weather、temp、clothes、tips
 
     def to_dict(self) -> dict:
         """转为字典（用于JSON序列化）"""
@@ -108,6 +110,8 @@ class TripPlan:
             "budget_breakdown": self.budget_breakdown.to_dict(),
             "packing_list": self.packing_list,
             "tips": self.tips,
+            "travel_date": self.travel_date,
+            "season_info": self.season_info,
         }
         if self.train_route:
             result["train_route"] = asdict(self.train_route)
@@ -167,6 +171,8 @@ class TripPlan:
             budget_breakdown=budget,
             packing_list=data.get("packing_list", []),
             tips=data.get("tips", []),
+            travel_date=data.get("travel_date"),
+            season_info=data.get("season_info"),
         )
 
     @classmethod

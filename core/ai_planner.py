@@ -1,16 +1,18 @@
 """
 AI旅行规划引擎 - 基于LLM生成个性化旅行方案
+支持多城市联程规划和季节信息注入
 """
 
 import json
 import re
-from typing import Optional
+from typing import Optional, Union
 from pathlib import Path
 
 from loguru import logger
 
 from api.llm_client import get_llm_client, LLMNotConfiguredError, LLMRequestError
 from core.itinerary import TripPlan, DayPlan, Activity, BudgetBreakdown, TrainRouteInfo
+from core.season_engine import get_season_engine, get_holiday_alert
 
 
 class AIPlanner:
@@ -67,16 +69,18 @@ class AIPlanner:
         budget: Optional[float] = None,
         preferences: Optional[list[str]] = None,
         train_info: Optional[dict] = None,
+        travel_date: Optional[str] = None,
     ) -> TripPlan:
         """
         生成旅行计划
 
         Args:
-            destination: 目的地
+            destination: 目的地（支持多城市，如"成都+九寨沟"、"拉萨→纳木错"）
             days: 天数
             budget: 预算（元），可选
             preferences: 偏好标签列表，如 ["美食优先", "文化历史"]
             train_info: 火车路线信息，可选
+            travel_date: 出行日期，格式YYYY-MM-DD，可选
 
         Returns:
             TripPlan对象
@@ -85,19 +89,46 @@ class AIPlanner:
             LLMNotConfiguredError: LLM未配置
             LLMRequestError: LLM请求失败
         """
+        # 检查是否为多目的地
+        destinations = self._parse_multi_destination(destination)
+
+        if len(destinations) > 1:
+            # 多城市联程规划
+            logger.info(f"检测到多目的地: {destinations}")
+            return self._plan_multi_city_trip(
+                destinations=destinations,
+                total_days=days,
+                budget=budget,
+                preferences=preferences or [],
+                travel_date=travel_date,
+            )
+
+        # 单目的地规划
+        destination = destinations[0] if destinations else destination
+
         # 构建系统提示
         system_prompt = self._build_system_prompt()
 
-        # 构建用户提示
+        # 构建用户提示（注入季节信息）
         user_prompt = self._build_user_prompt(
             destination=destination,
             days=days,
             budget=budget,
             preferences=preferences or [],
             train_info=train_info,
+            travel_date=travel_date,
         )
 
         logger.info(f"开始生成{destination}{days}日游计划...")
+
+        # 获取季节信息
+        season_info = None
+        if travel_date:
+            try:
+                month = int(travel_date.split("-")[1])
+                season_info = get_season_engine().get_season_info(destination, month)
+            except Exception as e:
+                logger.warning(f"获取季节信息失败: {e}")
 
         try:
             # 调用LLM
@@ -112,12 +143,233 @@ class AIPlanner:
 
             # 解析响应
             trip_plan = self._parse_llm_response(response, destination, days, train_info)
+            # 添加季节信息
+            trip_plan.travel_date = travel_date
+            trip_plan.season_info = season_info
             return trip_plan
 
         except (LLMNotConfiguredError, LLMRequestError):
             # LLM不可用，返回静态推荐
             logger.warning("LLM不可用，返回基于静态数据的推荐")
-            return self._fallback_plan(destination, days, budget, preferences, train_info)
+            plan = self._fallback_plan(destination, days, budget, preferences, train_info)
+            plan.travel_date = travel_date
+            plan.season_info = season_info
+            return plan
+
+    def _parse_multi_destination(self, destination: str) -> list[str]:
+        """
+        解析多目的地输入
+
+        Args:
+            destination: 目的地字符串，如"成都+九寨沟"、"拉萨→纳木错"
+
+        Returns:
+            目的地列表
+        """
+        # 定义分隔符
+        separators = ['+', '→', '->', '/', '，', ',']
+
+        result = destination
+        for sep in separators:
+            if sep in result:
+                # 分割并清理
+                parts = [p.strip() for p in result.split(sep)]
+                # 过滤空字符串
+                return [p for p in parts if p]
+
+        # 单目的地
+        return [destination.strip()]
+
+    def _plan_multi_city_trip(
+        self,
+        destinations: list[str],
+        total_days: int,
+        budget: Optional[float],
+        preferences: list[str],
+        travel_date: Optional[str],
+    ) -> TripPlan:
+        """
+        多城市联程规划
+
+        Args:
+            destinations: 目的地列表
+            total_days: 总天数
+            budget: 预算
+            preferences: 偏好
+            travel_date: 出行日期
+
+        Returns:
+            多城市旅行计划
+        """
+        num_cities = len(destinations)
+
+        # 分配天数（第一个城市多半天，最后一个城市少半天）
+        if num_cities == 2:
+            days_list = [total_days // 2 + 1, total_days // 2]
+        else:
+            base_days = total_days // num_cities
+            remainder = total_days % num_cities
+            days_list = [base_days + (1 if i < remainder else 0) for i in range(num_cities)]
+
+        logger.info(f"多城市天数分配: {dict(zip(destinations, days_list))}")
+
+        # 获取季节信息
+        season_info = None
+        if travel_date:
+            try:
+                month = int(travel_date.split("-")[1])
+                # 使用第一个目的地作为季节参考
+                season_info = get_season_engine().get_season_info(destinations[0], month)
+            except Exception:
+                pass
+
+        # 获取节假日提醒
+        holiday_info = None
+        if travel_date:
+            try:
+                from datetime import datetime
+                date_obj = datetime.strptime(travel_date, "%Y-%m-%d").date()
+                holiday_info = get_holiday_alert(date_obj)
+            except Exception:
+                pass
+
+        # 构建标题
+        if num_cities <= 3:
+            title = f"{'→'.join(destinations)}{total_days}日游"
+        else:
+            title = f"{destinations[0]}等{num_cities}地{total_days}日游"
+
+        # 构建概述
+        summary = f"一次玩转{num_cities}个城市，{'、'.join(destinations)}。"
+
+        # 构建每日行程（模拟多城市路线）
+        all_days = []
+        current_day = 1
+
+        for i, city in enumerate(destinations):
+            city_days = days_list[i]
+
+            # 获取城市攻略
+            city_guide = self._get_city_guide(city)
+            highlights = city_guide.get("highlights", []) if city_guide else []
+            food = city_guide.get("food", []) if city_guide else []
+
+            # 为每个城市生成行程
+            for d in range(1, city_days + 1):
+                # 判断是到达日还是游览日
+                if d == 1 and i > 0:
+                    # 到达日
+                    theme = f"抵达{city}"
+                    activities = [
+                        Activity(
+                            time="上午/下午",
+                            name=f"前往{city}",
+                            desc=f"从{destinations[i-1]}出发前往{city}，根据交通方式安排行程。",
+                            tip="记得提前查好交通信息"
+                        ),
+                        Activity(
+                            time="傍晚",
+                            name="入住休息",
+                            desc=f"抵达{city}后入住酒店，休整一下。",
+                            tip="不要安排太紧凑的行程"
+                        ),
+                    ]
+                    day_food = ["当地美食"]
+                elif d == city_days and i < num_cities - 1:
+                    # 离开日（如果是最后一个城市则不是）
+                    theme = f"告别{city}"
+                    activities = [
+                        Activity(
+                            time="上午",
+                            name="最后游览",
+                            desc=f"抓紧时间再看看{city}的景点。",
+                            tip="注意退房时间"
+                        ),
+                    ]
+                    day_food = food[:2] if food else ["当地美食"]
+                else:
+                    # 正常游览日
+                    if highlights:
+                        theme = f"深度游{city}"
+                        activities = [
+                            Activity(
+                                time="上午",
+                                name=highlights[0] if len(highlights) > 0 else f"{city}景点",
+                                desc=f"游览{highlights[0] if len(highlights) > 0 else city}，感受当地特色。",
+                                tip="建议请导游讲解"
+                            ),
+                            Activity(
+                                time="下午",
+                                name=highlights[1] if len(highlights) > 1 else f"{city}特色体验",
+                                desc=f"继续探索{highlights[1] if len(highlights) > 1 else city}。",
+                                tip="可以尝试当地特色活动"
+                            ),
+                        ]
+                    else:
+                        theme = f"探索{city}"
+                        activities = [
+                            Activity(
+                                time="全天",
+                                name=f"{city}自由行",
+                                desc=f"全天在{city}自由活动。",
+                                tip="根据个人兴趣安排"
+                            ),
+                        ]
+                    day_food = food[:3] if food else ["当地特色美食"]
+
+                all_days.append(DayPlan(
+                    day_number=current_day,
+                    theme=theme,
+                    activities=activities,
+                    food=day_food,
+                    accommodation=f"{city}酒店" if d != city_days or i < num_cities - 1 else "无（返程日）",
+                ))
+                current_day += 1
+
+        # 构建Tips
+        tips = [
+            f"全程{total_days}天，游览{num_cities}个城市",
+            "城市间交通建议提前预订",
+            "注意保管好个人财物",
+        ]
+
+        # 添加节假日提醒
+        if holiday_info and holiday_info.get("is_holiday"):
+            tips.insert(0, holiday_info.get("alert", ""))
+
+        # 预算估算
+        per_city_budget = (budget or 2000) / num_cities
+        budget_breakdown = BudgetBreakdown(
+            transport=budget * 0.4 if budget else per_city_budget * 0.4 * num_cities,
+            accommodation=per_city_budget * 0.3 * num_cities if budget else 100 * total_days,
+            food=per_city_budget * 0.2 * num_cities if budget else 80 * total_days,
+            tickets=per_city_budget * 0.1 * num_cities if budget else 50 * total_days,
+            total=budget or (2000 * num_cities),
+        )
+
+        # 装备清单
+        packing_list = [
+            "身份证、护照",
+            "手机、充电宝",
+            "换洗衣物",
+            "洗漱用品",
+            "常用药品",
+            "相机（可选）",
+        ]
+
+        return TripPlan(
+            title=title,
+            summary=summary,
+            destination=f"{'→'.join(destinations)}",
+            days_count=total_days,
+            days=all_days,
+            train_route=None,  # 多城市路由信息复杂，暂不生成
+            budget_breakdown=budget_breakdown,
+            packing_list=packing_list,
+            tips=tips,
+            travel_date=travel_date,
+            season_info=season_info,
+        )
 
     def refine_plan(
         self,
@@ -216,6 +468,7 @@ class AIPlanner:
         budget: Optional[float],
         preferences: list[str],
         train_info: Optional[dict],
+        travel_date: Optional[str] = None,
     ) -> str:
         """构建用户提示"""
         # 获取城市攻略
@@ -224,6 +477,31 @@ class AIPlanner:
         prompt_parts = [
             f"帮我规划一次{destination}{days}日游旅行计划。",
         ]
+
+        # 注入季节信息
+        if travel_date:
+            try:
+                year, month, _ = travel_date.split("-")
+                season_info = get_season_engine().get_season_info(destination, int(month))
+                prompt_parts.append(f"\n📅 出行时间：{travel_date}（{season_info['season']}）")
+                prompt_parts.append(f"🌤️ 天气概况：{season_info['weather']}，气温{season_info['temp']}")
+                prompt_parts.append(f"👔 穿衣建议：{season_info['clothes']}")
+                prompt_parts.append(f"💡 注意事项：{season_info['tips']}")
+
+                # 节假日提醒
+                from datetime import datetime
+                date_obj = datetime.strptime(travel_date, "%Y-%m-%d").date()
+                holiday_info = get_holiday_alert(date_obj)
+                if holiday_info.get("alert"):
+                    prompt_parts.append(f"\n{holiday_info['alert']}")
+                    if holiday_info.get("tips"):
+                        prompt_parts.append(f"建议：{'；'.join(holiday_info['tips'])}")
+
+                # 季节性推荐
+                seasonal_rec = get_season_engine().get_seasonal_recommendation(destination, int(month))
+                prompt_parts.append(f"\n{seasonal_rec}")
+            except Exception as e:
+                logger.warning(f"获取季节信息失败: {e}")
 
         # 目的地介绍
         if city_guide:
