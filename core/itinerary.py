@@ -248,7 +248,7 @@ def create_sample_trip_plan() -> TripPlan:
     """
     return TripPlan(
         title="拉萨5日深度游",
-        summary="从东安东出发，乘坐Z264次列车穿越青藏高原，感受世界屋脊的壮美与神秘。这是一次洗涤心灵的旅程，适合喜欢慢旅行、摄影和文化探索的朋友。",
+        summary="从长沙南出发，乘坐Z264次列车穿越青藏高原，感受世界屋脊的壮美与神秘。这是一次洗涤心灵的旅程，适合喜欢慢旅行、摄影和文化探索的朋友。",
         destination="拉萨",
         days_count=5,
         days=[
@@ -258,7 +258,7 @@ def create_sample_trip_plan() -> TripPlan:
                 activities=[
                     Activity(
                         time="08:00-09:00",
-                        name="东安东站出发",
+                        name="长沙南站出发",
                         desc="提前1小时到站，取票安检，准备登车",
                         tip="记得带身份证，刷身份证进站"
                     ),
@@ -289,7 +289,7 @@ def create_sample_trip_plan() -> TripPlan:
         ],
         train_route=TrainRouteInfo(
             train_no="Z264",
-            from_station="东安东",
+            from_station="长沙南",
             to_station="拉萨",
             depart_time="08:30",
             arrive_time="11:50",

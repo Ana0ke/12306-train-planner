@@ -105,7 +105,7 @@ class RoutePlanner:
         
         Demo模式特殊处理：
         - 当直达路线不存在时，自动尝试换乘方案
-        - 换乘站点使用 Demo 数据中已有的中转站
+        - 换乘站点使用 Demo 数据中已有的大站中转
         """
         cache_key = f"transfer:{from_station}:{to_station}:{travel_date}"
         cached = self.cache.get(cache_key)
@@ -172,8 +172,7 @@ class RoutePlanner:
         Demo模式专用换乘搜索
         
         Demo数据中的换乘路线：
-        - 东安东→永州→深圳北/广州南
-        - 永州→深圳北/广州南
+        - 通过长沙南/广州南/武汉/杭州东等枢纽站中转
         
         Args:
             from_station: 出发站
@@ -404,7 +403,7 @@ class RoutePlanner:
         """
         # Demo模式：使用有数据的中转站
         if self.client.demo_mode:
-            demo_hubs = ["永州", "长沙南", "广州南", "深圳北"]
+            demo_hubs = ["长沙南", "广州南", "深圳北", "武汉", "杭州东"]
             # 根据起终点筛选相关枢纽
             prioritized = []
             for hub in demo_hubs:

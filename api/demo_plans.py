@@ -81,7 +81,7 @@ def _create_lhasa_5day_plan() -> TripPlan:
                 activities=[
                     Activity(
                         time="08:00-09:00",
-                        name="东安东站出发",
+                        name="长沙南站出发",
                         desc="提前1小时到站，取票安检，准备登车。携带身份证原件和学生证（景区可能有优惠）。",
                         tip="记得带身份证，刷身份证进站"
                     ),
@@ -214,7 +214,7 @@ def _create_lhasa_5day_plan() -> TripPlan:
         ],
         train_route=TrainRouteInfo(
             train_no="Z264",
-            from_station="东安东",
+            from_station="长沙南",
             to_station="拉萨",
             depart_time="08:30",
             arrive_time="11:50",
@@ -426,7 +426,7 @@ def _create_chengdu_4day_plan() -> TripPlan:
         ],
         train_route=TrainRouteInfo(
             train_no="Z334",
-            from_station="东安东",
+            from_station="长沙南",
             to_station="成都",
             depart_time="09:48",
             arrive_time="08:24+1",
@@ -588,7 +588,7 @@ def _create_xian_3day_plan() -> TripPlan:
         ],
         train_route=TrainRouteInfo(
             train_no="Z230",
-            from_station="东安东",
+            from_station="长沙南",
             to_station="西安",
             depart_time="22:22",
             arrive_time="12:48+1",
@@ -755,7 +755,7 @@ def _create_xiamen_3day_plan() -> TripPlan:
         ],
         train_route=TrainRouteInfo(
             train_no="K229",
-            from_station="东安东",
+            from_station="长沙南",
             to_station="厦门",
             depart_time="15:36",
             arrive_time="19:52+1",
@@ -981,7 +981,7 @@ def _create_lijiang_5day_plan() -> TripPlan:
         ],
         train_route=TrainRouteInfo(
             train_no="K9625",
-            from_station="东安东",
+            from_station="长沙南",
             to_station="丽江",
             depart_time="18:20",
             arrive_time="22:50+2",

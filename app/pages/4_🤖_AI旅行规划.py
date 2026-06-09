@@ -160,7 +160,7 @@ with st.form("ai_trip_form"):
     with col3:
         from_station = st.text_input(
             "🚂 出发城市",
-            value="东安东",
+            value="长沙",
             help="从哪里出发"
         )
 
@@ -220,7 +220,7 @@ with st.form("ai_trip_form"):
             with season_col3:
                 st.metric("💨 气温", season_info['temp'])
             with season_col4:
-                st.metric("👔 穿衣", season_info['season'])
+                st.metric("👔 穿衣", season_info.get('clothes', '未知')[:8])
 
             st.markdown(f"**👔 穿衣建议：** {season_info['clothes']}")
             st.markdown(f"**💡 注意事项：** {season_info['tips']}")
@@ -269,19 +269,12 @@ if submitted:
         with st.spinner("🔍 查询最优火车路线..."):
             try:
                 planner = RoutePlanner()
-                routes = planner.search(
+                # 直接用search_with_transfer，它内部会先查直达再查换乘
+                routes = planner.search_with_transfer(
                     from_station=from_station,
                     to_station=destination,
                     travel_date="2024-01-01",  # 日期不影响路线
                 )
-
-                # 如果没有直达，查询换乘
-                if not routes:
-                    routes = planner.search_with_transfer(
-                        from_station=from_station,
-                        to_station=destination,
-                        travel_date="2024-01-01",
-                    )
 
                 # 选择最优方案
                 train_info = None
