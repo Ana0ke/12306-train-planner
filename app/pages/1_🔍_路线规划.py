@@ -145,8 +145,9 @@ if submitted:
 
                 st.success(f"找到 {len(sorted_routes)} 个方案！")
                 
-                # 数据来源标记
-                data_source = "🟢 12306实时" if client.use_realtime else "📊 演示数据"
+                # 数据来源标记（根据实际返回数据判断，而非客户端状态）
+                is_realtime = any(r.get("is_realtime") for r in sorted_routes[:1])
+                data_source = "🟢 12306实时" if is_realtime else "📊 演示数据"
                 st.caption(f"数据来源：{data_source}")
 
                 # 方案对比表 - 卡片化展示

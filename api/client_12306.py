@@ -59,17 +59,13 @@ class Client12306:
         self._station_map: Optional[dict[str, str]] = None
         self._station_names: Optional[list[str]] = None
         
-        # 初始化RealtimeClient
+        # 初始化RealtimeClient（不预检is_available，实际查询时再判断）
         self._realtime_client: Optional[RealtimeClient] = None
         if self._use_realtime:
             try:
                 self._realtime_client = RealtimeClient()
-                if self._realtime_client.is_available():
-                    logger.info("12306客户端已启用实时查询模式")
-                else:
-                    logger.warning("12306服务不可用，将使用Demo模式")
-                    self._use_realtime = False
-                    self._demo_mode = True
+                # 不再预检is_available()——Streamlit Cloud等环境可能init慢但查询能通
+                logger.info("12306客户端已初始化，将优先尝试实时查询")
             except Exception as e:
                 logger.warning(f"初始化RealtimeClient失败: {e}，将使用Demo模式")
                 self._use_realtime = False
@@ -80,7 +76,7 @@ class Client12306:
     
     @property
     def use_realtime(self) -> bool:
-        """是否使用真实查询"""
+        """是否使用真实查询（初始化时已决定，不再动态检测）"""
         return self._use_realtime and self._realtime_client is not None
 
     @property
