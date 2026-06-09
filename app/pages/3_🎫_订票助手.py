@@ -6,6 +6,15 @@ import streamlit as st
 
 st.set_page_config(page_title="订票助手 🎫", page_icon="🎫", layout="wide")
 
+# ===== 路径修复 + 注入全局样式 =====
+import sys
+from pathlib import Path
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+from components.styles import inject_styles
+inject_styles()
+
 st.title("🎫 订票助手")
 st.markdown('<p style="color:#666;">傻瓜式订票指引，让你轻松搞懂火车票</p>', unsafe_allow_html=True)
 

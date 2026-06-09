@@ -37,28 +37,9 @@ st.set_page_config(
 )
 
 
-# ===== 注入自定义CSS美化 =====
-def _inject_custom_styles():
-    """注入自定义CSS美化"""
-    css_path = Path(__file__).parent / "static" / "style.css"
-    if css_path.exists():
-        css = css_path.read_text(encoding="utf-8")
-        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
-
-_inject_custom_styles()
-
-
-# ===== 注入PWA支持 =====
-def _inject_pwa_meta():
-    """注入PWA支持"""
-    st.markdown("""
-    <meta name="theme-color" content="#FF6B35">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="省心小助手">
-    """, unsafe_allow_html=True)
-
-_inject_pwa_meta()
+# ===== 注入全局样式 =====
+from components.styles import inject_styles
+inject_styles()
 
 
 # ===== 侧边栏 =====

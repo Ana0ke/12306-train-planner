@@ -18,6 +18,10 @@ from api.client_12306 import Client12306
 
 st.set_page_config(page_title="路线规划 🔍", page_icon="🔍", layout="wide")
 
+# ===== 注入全局样式 =====
+from components.styles import inject_styles
+inject_styles()
+
 st.title("🔍 路线规划")
 st.caption("输入出发地和目的地，智能推荐最优出行方案")
 

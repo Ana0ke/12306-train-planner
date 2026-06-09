@@ -22,13 +22,15 @@ from datetime import datetime, date
 
 from api.llm_client import check_llm_status
 from api.demo_plans import get_demo_plan_by_destination, POPULAR_DESTINATIONS
+from components.styles import inject_styles
+
+st.set_page_config(page_title="AI旅行规划 🤖", page_icon="🤖", layout="wide")
+inject_styles()
 from core.ai_planner import AIPlanner
 from core.planner import RoutePlanner
 from core.itinerary import TripPlan
 from core.season_engine import get_season_info, get_holiday_alert, get_seasonal_recommendation
 
-
-st.set_page_config(page_title="AI旅行规划 🤖", page_icon="🤖", layout="wide")
 
 # ===== 页面状态初始化 =====
 if "trip_plan" not in st.session_state:

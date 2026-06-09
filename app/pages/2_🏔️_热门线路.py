@@ -8,6 +8,14 @@ from pathlib import Path
 
 st.set_page_config(page_title="热门线路 🏔️", page_icon="🏔️", layout="wide")
 
+# ===== 路径修复 + 注入全局样式 =====
+import sys
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+from components.styles import inject_styles
+inject_styles()
+
 st.title("🏔️ 热门旅游线路")
 st.caption("8条经典火车旅游线路，每条都有沿途攻略和乘车指南")
 
