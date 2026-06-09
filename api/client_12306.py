@@ -3,12 +3,9 @@
 支持内嵌实时查询和Demo模式
 
 查询策略（按优先级）：
-1. USE_REALTIME=true → RealtimeClient真实查询
-2. DEMO_MODE=true → Demo模拟数据（默认）
-
-注意：
-- 真实12306查询依赖正确的Cookie，容易被拦截
-- 建议设置环境变量 USE_REALTIME=false 禁用真实查询
+1. 默认尝试真实查询（RealtimeClient），失败自动fallback到Demo模式
+2. USE_REALTIME=false → 强制禁用真实查询，只用Demo数据
+3. DEMO_MODE=true → 强制使用Demo数据
 """
 
 import os
@@ -47,16 +44,16 @@ class Client12306:
             demo_mode: 是否启用Demo模式，None时从环境变量DEMO_MODE读取
             use_realtime: 是否使用真实查询，None时从环境变量USE_REALTIME读取
         """
-        # Demo模式
+        # Demo模式（默认关闭，真实查询失败时自动fallback）
         if demo_mode is None:
-            demo_mode_str = os.getenv("DEMO_MODE", "true").lower()
-            demo_mode = demo_mode_str not in ("false", "0", "no")
+            demo_mode_str = os.getenv("DEMO_MODE", "false").lower()
+            demo_mode = demo_mode_str in ("true", "1", "yes")
         self._demo_mode = demo_mode
         
-        # 真实查询模式
+        # 真实查询模式（默认开启，除非显式禁用）
         if use_realtime is None:
-            use_realtime_str = os.getenv("USE_REALTIME", "false").lower()
-            use_realtime = use_realtime_str in ("true", "1", "yes")
+            use_realtime_str = os.getenv("USE_REALTIME", "true").lower()
+            use_realtime = use_realtime_str not in ("false", "0", "no")
         self._use_realtime = use_realtime
         
         self._station_map: Optional[dict[str, str]] = None
