@@ -2,7 +2,22 @@
 12306省心小助手 - Streamlit 主入口
 """
 
+import os
 import streamlit as st
+
+# ===== Streamlit Cloud 兼容：优先从 secrets.toml 读取配置 =====
+def _load_secrets():
+    """从 Streamlit secrets 加载环境变量"""
+    try:
+        secrets = st.secrets
+        for key in ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "DEMO_MODE"]:
+            if key in secrets and key not in os.environ:
+                os.environ[key] = str(secrets[key])
+    except Exception:
+        pass
+
+_load_secrets()
+
 from api.llm_client import check_llm_status
 
 
@@ -30,7 +45,8 @@ with st.sidebar:
         st.success("✅ AI规划已启用")
     else:
         st.markdown("### 🤖 AI状态")
-        st.warning("⚠️ AI功能待配置")
+        st.warning("⚠️ 体验模式（AI功能待配置）")
+        st.caption("💡 仍可使用路线查询和热门方案体验")
 
     st.divider()
 
@@ -72,6 +88,8 @@ with col_intro2:
     💬 **对话调整**：随时修改，"第二天太满了"直接重排
 
     🎯 **个性化推荐**：根据偏好定制，美食/文化/省钱各有侧重
+
+    🎭 **体验模式**：无需API Key，也能预览热门方案
     """)
 
 st.divider()
@@ -130,11 +148,7 @@ with col4:
     - 💰 费用预估明细
     - 🎒 装备清单Tips
     """)
-    # 检查AI状态
-    if llm_status["configured"]:
-        st.markdown("👉 入口：**AI旅行规划**")
-    else:
-        st.markdown("⚠️ 需要配置API密钥")
+    st.markdown("👉 入口：**AI旅行规划**")
 
 st.divider()
 

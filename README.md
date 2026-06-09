@@ -185,3 +185,17 @@ MIT License
 ---
 
 ⭐ 如果这个项目对你有帮助，欢迎点个 Star！
+
+## 🌐 在线体验
+
+即将上线 Streamlit Cloud，敬请期待！
+
+## 🚀 部署
+
+详细部署方案请查看 [DEPLOY.md](DEPLOY.md)
+
+快速部署到 Streamlit Cloud（免费）：
+1. Fork 本仓库
+2. 前往 [share.streamlit.io](https://share.streamlit.io)
+3. New App → 选择仓库 → 主文件 `app/main.py` → Deploy!
+4. 可选：在 Secrets 中配置 `LLM_API_KEY` 启用AI功能
