@@ -1,100 +1,202 @@
 """
 12306模拟数据 - Demo模式
-预置常见路线的模拟数据，用于演示和测试
-支持模糊匹配：输入"东安东→深圳"可匹配"东安东-永州"+"永州-深圳北"
+预置热门路线的模拟数据，用于演示和测试
+支持模糊匹配站名和换乘路线自动拼接
 """
 
 DEMO_DATA = {
-    "东安东-永州": [
+    "武汉-广州南": [
         {
-            "train_no": "K580",
-            "from_station": "东安东",
-            "to_station": "永州",
-            "depart_time": "08:15",
-            "arrive_time": "08:45",
-            "duration": "00:30",
-            "train_type": "普速",
-            "price_yz": 12.5,
-            "price_rw": 54.5,
-            "price_yw": 78.5,
-        },
-        {
-            "train_no": "K9212",
-            "from_station": "东安东",
-            "to_station": "永州",
-            "depart_time": "14:20",
-            "arrive_time": "14:50",
-            "duration": "00:30",
-            "train_type": "普速",
-            "price_yz": 12.5,
-            "price_rw": 54.5,
-            "price_yw": 78.5,
-        },
-    ],
-
-    "永州-广州南": [
-        {
-            "train_no": "G6120",
-            "from_station": "永州",
+            "train_no": "G1001",
+            "from_station": "武汉",
             "to_station": "广州南",
-            "depart_time": "09:30",
-            "arrive_time": "12:35",
-            "duration": "03:05",
-            "train_type": "高铁",
-            "price_edz": 265.0,
-            "price_ydz": 424.0,
-            "price_swb": 843.0,
-        },
-        {
-            "train_no": "G6128",
-            "from_station": "永州",
-            "to_station": "广州南",
-            "depart_time": "14:10",
-            "arrive_time": "17:15",
-            "duration": "03:05",
-            "train_type": "高铁",
-            "price_edz": 265.0,
-            "price_ydz": 424.0,
-            "price_swb": 843.0,
-        },
-        {
-            "train_no": "G548",
-            "from_station": "永州",
-            "to_station": "广州南",
-            "depart_time": "16:45",
-            "arrive_time": "20:00",
-            "duration": "03:15",
-            "train_type": "高铁",
-            "price_edz": 265.0,
-            "price_ydz": 424.0,
-            "price_swb": 843.0,
-        },
-    ],
-
-    "永州-深圳北": [
-        {
-            "train_no": "G6075",
-            "from_station": "永州",
-            "to_station": "深圳北",
-            "depart_time": "10:20",
-            "arrive_time": "13:45",
-            "duration": "03:25",
-            "train_type": "高铁",
-            "price_edz": 285.0,
-            "price_ydz": 455.0,
-            "price_swb": 908.0,
-        },
-        {
-            "train_no": "G6031",
-            "from_station": "永州",
-            "to_station": "深圳北",
-            "depart_time": "15:30",
-            "arrive_time": "19:00",
+            "depart_time": "07:30",
+            "arrive_time": "11:00",
             "duration": "03:30",
             "train_type": "高铁",
-            "price_edz": 285.0,
-            "price_ydz": 455.0,
-            "price_swb": 908.0,
+            "price_edz": 463.5,
+            "price_ydz": 738.5,
+            "price_swb": 1388.5,
+        },
+        {
+            "train_no": "G1003",
+            "from_station": "武汉",
+            "to_station": "广州南",
+            "depart_time": "09:00",
+            "arrive_time": "12:25",
+            "duration": "03:25",
+            "train_type": "高铁",
+            "price_edz": 463.5,
+            "price_ydz": 738.5,
+            "price_swb": 1388.5,
+        },
+        {
+            "train_no": "G1007",
+            "from_station": "武汉",
+            "to_station": "广州南",
+            "depart_time": "14:30",
+            "arrive_time": "17:55",
+            "duration": "03:25",
+            "train_type": "高铁",
+            "price_edz": 463.5,
+            "price_ydz": 738.5,
+            "price_swb": 1388.5,
+        },
+    ],
+
+    "广州南-长沙南": [
+        {
+            "train_no": "G6101",
+            "from_station": "广州南",
+            "to_station": "长沙南",
+            "depart_time": "07:00",
+            "arrive_time": "09:20",
+            "duration": "02:20",
+            "train_type": "高铁",
+            "price_edz": 164.5,
+            "price_ydz": 264.5,
+            "price_swb": 527.0,
+        },
+        {
+            "train_no": "G6105",
+            "from_station": "广州南",
+            "to_station": "长沙南",
+            "depart_time": "10:30",
+            "arrive_time": "12:50",
+            "duration": "02:20",
+            "train_type": "高铁",
+            "price_edz": 164.5,
+            "price_ydz": 264.5,
+            "price_swb": 527.0,
+        },
+        {
+            "train_no": "G6145",
+            "from_station": "广州南",
+            "to_station": "长沙南",
+            "depart_time": "16:00",
+            "arrive_time": "18:20",
+            "duration": "02:20",
+            "train_type": "高铁",
+            "price_edz": 164.5,
+            "price_ydz": 264.5,
+            "price_swb": 527.0,
+        },
+    ],
+
+    "杭州东-南京南": [
+        {
+            "train_no": "G7562",
+            "from_station": "杭州东",
+            "to_station": "南京南",
+            "depart_time": "07:15",
+            "arrive_time": "08:35",
+            "duration": "01:20",
+            "train_type": "高铁",
+            "price_edz": 117.5,
+            "price_ydz": 197.5,
+            "price_swb": 366.5,
+        },
+        {
+            "train_no": "G7566",
+            "from_station": "杭州东",
+            "to_station": "南京南",
+            "depart_time": "10:00",
+            "arrive_time": "11:20",
+            "duration": "01:20",
+            "train_type": "高铁",
+            "price_edz": 117.5,
+            "price_ydz": 197.5,
+            "price_swb": 366.5,
+        },
+        {
+            "train_no": "G7572",
+            "from_station": "杭州东",
+            "to_station": "南京南",
+            "depart_time": "16:30",
+            "arrive_time": "17:50",
+            "duration": "01:20",
+            "train_type": "高铁",
+            "price_edz": 117.5,
+            "price_ydz": 197.5,
+            "price_swb": 366.5,
+        },
+    ],
+
+    "昆明南-大理": [
+        {
+            "train_no": "D8692",
+            "from_station": "昆明南",
+            "to_station": "大理",
+            "depart_time": "07:20",
+            "arrive_time": "09:55",
+            "duration": "02:35",
+            "train_type": "动车",
+            "price_edz": 145.0,
+            "price_ydz": 232.0,
+            "price_swb": 435.0,
+        },
+        {
+            "train_no": "D8696",
+            "from_station": "昆明南",
+            "to_station": "大理",
+            "depart_time": "10:30",
+            "arrive_time": "13:05",
+            "duration": "02:35",
+            "train_type": "动车",
+            "price_edz": 145.0,
+            "price_ydz": 232.0,
+            "price_swb": 435.0,
+        },
+        {
+            "train_no": "D8702",
+            "from_station": "昆明南",
+            "to_station": "大理",
+            "depart_time": "15:00",
+            "arrive_time": "17:35",
+            "duration": "02:35",
+            "train_type": "动车",
+            "price_edz": 145.0,
+            "price_ydz": 232.0,
+            "price_swb": 435.0,
+        },
+    ],
+
+    "深圳北-厦门北": [
+        {
+            "train_no": "D2318",
+            "from_station": "深圳北",
+            "to_station": "厦门北",
+            "depart_time": "07:45",
+            "arrive_time": "10:22",
+            "duration": "02:37",
+            "train_type": "动车",
+            "price_edz": 150.0,
+            "price_ydz": 240.0,
+            "price_swb": 450.0,
+        },
+        {
+            "train_no": "D2322",
+            "from_station": "深圳北",
+            "to_station": "厦门北",
+            "depart_time": "11:00",
+            "arrive_time": "13:37",
+            "duration": "02:37",
+            "train_type": "动车",
+            "price_edz": 150.0,
+            "price_ydz": 240.0,
+            "price_swb": 450.0,
+        },
+        {
+            "train_no": "D2326",
+            "from_station": "深圳北",
+            "to_station": "厦门北",
+            "depart_time": "16:00",
+            "arrive_time": "18:37",
+            "duration": "02:37",
+            "train_type": "动车",
+            "price_edz": 150.0,
+            "price_ydz": 240.0,
+            "price_swb": 450.0,
         },
     ],
 
@@ -470,7 +572,7 @@ def get_demo_routes(from_station: str, to_station: str) -> list[dict]:
     获取模拟路线数据，支持模糊匹配站名
     
     匹配策略：
-    1. 精确匹配 key（如 "东安东-永州"）
+    1. 精确匹配 key（如 "武汉-广州南"）
     2. 遍历所有 key，对出发站和到达站分别做包含匹配
     3. 站名 "深圳" 可匹配 "深圳北"、"深圳东" 等
     
@@ -528,7 +630,7 @@ def get_demo_transfer_routes(from_station: str, to_station: str) -> tuple[list[d
     to_station = to_station.strip()
     
     # 定义可中转的枢纽站（这些站之间的数据我们有）
-    transfer_hubs = ["永州", "长沙南", "广州南", "深圳北"]
+    transfer_hubs = ["长沙南", "广州南", "深圳北", "武汉", "杭州东"]
     
     for hub in transfer_hubs:
         # 检查：出发站→中转站，中转站→终点站 是否都有数据
